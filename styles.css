@@ -1,0 +1,756 @@
+:root {
+    --primary-color: #0E0E10;
+    --secondary-color: #1A1A1E;
+    --tertiary-color: #2A2A2F;
+    --accent-color: #33FFCC;
+    --text-color: #ffffff;
+    --border-color: #363636;
+    --hover-color: #4b4b4b;
+}
+
+.cal-sans-regular {
+    font-family: "Cal Sans", sans-serif;
+    font-weight: 400;
+    font-style: normal;
+}
+
+.inter-regular {
+    font-family: "Inter", sans-serif;
+    font-optical-sizing: auto;
+    font-weight: 400;
+    font-style: normal;
+}  
+
+.loading-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: var(--primary-color);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    transition: opacity 0.3s ease-out;
+    font-family: 'Cal Sans';
+}
+
+.loading-screen.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.loading-content {
+    text-align: center;
+    color: var(--text-color);
+}
+
+.loading-spinner {
+    width: 50px;
+    height: 50px;
+    border: 3px solid var(--secondary-color);
+    border-top: 3px solid var(--accent-color);
+    border-radius: 50%;
+    margin: 0 auto 20px;
+    animation: spin 1s linear infinite;
+}
+
+.loading-content h2 {
+    margin-bottom: 10px;
+    color: var(--accent-color);
+}
+
+.loading-status {
+    color: #888;
+    font-size: 0.9em;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Inter',-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+    background-color: var(--primary-color);
+    color: var(--text-color);
+    height: 100vh;
+    overflow: hidden;
+}
+
+.app-container {
+    display: flex;
+    height: 100vh;
+    position: relative;
+}
+
+/* Sidebar Styles */
+.sidebar {
+    width: 300px;
+    background-color: var(--primary-color);
+    border-right: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+}
+
+.user-profile {
+    padding: 20px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.profile-header h2 {
+    margin-bottom: 15px;
+    color: var(--accent-color);
+    font-family: 'Cal Sans';
+}
+
+.profile-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* Base avatar styles */
+.avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background-color: var(--accent-color);
+    background-size: cover;
+    background-position: center;
+    flex-shrink: 0;
+    margin-right: 10px;
+}
+
+/* Channel-specific avatar styles */
+.channel-list .avatar,
+.channel-card .avatar,
+#channelProfileModal .profile-modal-avatar {
+    border-radius: 8px;
+    background-image: url('/img/default-channel.svg');
+}
+
+/* DM list avatar styles */
+.dm-list .avatar {
+    border-radius: 50%;
+    background-image: url('/img/default-avatar.svg');
+}
+
+.user-details {
+    display: flex;
+    flex-direction: column;
+}
+
+.username {
+    font-weight: bold;
+}
+
+.npub {
+    font-size: 0.8em;
+    color: #888;
+    word-break: break-all;
+}
+
+/* Sections */
+.sections {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.section {
+    display: flex;
+    flex-direction: column;
+}
+
+.section-header {
+    padding: 15px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.section-header h3 {
+    font-size: 1em;
+    font-weight: 600;
+    color: #888;
+}
+
+.new-channel-btn {
+    background: var(--accent-color);
+    border: none;
+    color: var(--primary-color);
+    width: 24px;
+    height: 24px;
+    border-radius: 50px;
+    cursor: pointer;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.section-list {
+    padding: 10px 0;
+}
+
+.list-item {
+    padding: 10px 20px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.list-item:hover {
+    background-color: var(--hover-color);
+}
+
+.list-item.active {
+    background-color: var(--hover-color);
+}
+
+.list-item .name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Main Content Styles */
+.main-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background-color: var(--secondary-color);
+    min-width: 0;
+    transition: margin-right 0.3s ease;
+    margin-right: 260px;
+}
+
+.main-content.sidebar-hidden {
+    margin-right: 0;
+}
+
+.chat-header {
+    padding: 8px;
+    border-bottom: 1px solid var(--border-color);
+    background-color: var(--secondary-color);
+}
+
+.header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.channel-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.info-btn {
+    background: none;
+    border: none;
+    color: var(--text-color);
+    padding: 8px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s;
+}
+
+.info-btn:hover {
+    background-color: var(--hover-color);
+}
+
+.info-btn .material-symbols-rounded {
+    font-size: 24px;
+}
+
+.messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    /* gap: 15px; */
+    min-width: 0;
+}
+
+.message {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 8px 4px;
+}
+
+.message .avatar {
+    width: 32px;
+    height: 32px;
+}
+
+.message-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.message .name {
+    font-size: 0.9em;
+    font-weight: 500;
+    color: #888;
+}
+
+.message-content {
+    background-color: var(--tertiary-color);
+    padding: 10px 15px;
+    border-radius: 10px;
+    max-width: 70%;
+    word-break: break-word;
+    overflow-wrap: break-word;
+}
+
+.message-input {
+    padding: 20px;
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    gap: 10px;
+    background-color: var(--secondary-color);
+}
+
+textarea {
+    flex: 1;
+    padding: 10px;
+    border-radius: 5px;
+    border: 1px solid var(--border-color);
+    background-color: var(--primary-color);
+    color: var(--text-color);
+    resize: none;
+    height: 40px;
+    font-family: inherit;
+}
+
+button {
+    padding: 10px 20px;
+    background-color: var(--accent-color);
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+button:hover {
+    opacity: 0.9;
+}
+
+/* Modal Styles */
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.modal.active {
+    display: flex;
+}
+
+.modal-content {
+    background-color: var(--secondary-color);
+    padding: 30px;
+    border-radius: 10px;
+    width: 400px;
+    max-width: 90%;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.modal-content h2 {
+    margin-bottom: 20px;
+    color: var(--accent-color);
+}
+
+.form-group {
+    margin-bottom: 15px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 5px;
+    color: #888;
+    font-size: 0.9em;
+}
+
+.modal-content input,
+.modal-content textarea {
+    width: 100%;
+    padding: 10px;
+    border-radius: 5px;
+    border: 1px solid var(--border-color);
+    background-color: var(--primary-color);
+    color: var(--text-color);
+    font-family: inherit;
+}
+
+.modal-content textarea {
+    min-height: 80px;
+    resize: vertical;
+}
+
+.modal-buttons {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.modal-buttons button {
+    flex: 1;
+}
+
+.cancel-btn {
+    background-color: var(--secondary-color);
+    border: 1px solid var(--border-color);
+}
+
+/* Profile Modal Specific Styles */
+.profile-modal-header {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.profile-modal-avatar {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background-size: cover;
+    background-position: center;
+    background-color: var(--accent-color);
+}
+
+.profile-modal-info {
+    flex: 1;
+}
+
+.profile-modal-name {
+    margin: 0;
+    font-size: 1.2em;
+}
+
+.profile-modal-npub {
+    font-size: 0.9em;
+    color: #888;
+    word-break: break-all;
+}
+
+.profile-modal-about {
+    color: #bbb;
+    line-height: 1.5;
+    margin-bottom: 20px;
+}
+
+/* Make avatars and names clickable */
+.avatar,
+.name {
+    cursor: pointer;
+}
+
+.avatar:hover,
+.name:hover {
+    opacity: 0.8;
+}
+
+.right-sidebar {
+    width: 260px;
+    background-color: var(--tertiary-color);
+    border-left: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    padding: 8px 0;
+    box-sizing: border-box;
+    overflow-y: auto;
+    flex-shrink: 0;
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    transition: transform 0.3s ease;
+}
+
+.right-sidebar.hidden {
+    transform: translateX(100%);
+}
+
+.right-sidebar .sidebar-title {
+    font-size: 0.8em;
+    text-transform: uppercase;
+    font-weight: bold;
+    color: var(--accent-color);
+    margin-bottom: 8px;
+    padding: 0 12px;
+}
+
+.member-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding: 0 8px;
+}
+
+.member-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 4px 4px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.member-item:hover {
+    background-color: var(--hover-color);
+}
+
+.member-item .avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 56px;
+    background-size: cover;
+    background-position: center;
+    background-color: var(--accent-color);
+}
+
+.member-item .name {
+    font-size: 1em;
+    color: var(--text-color);
+    font-weight: 500;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.member-item .avatar:hover, .member-item .name:hover {
+    opacity: 1;
+}
+
+.member-item .crown {
+    font-size: 1em;
+    color: gold;
+    margin-left: 4px;
+}
+
+.profile-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 8px;
+    background: var(--tertiary-color);
+    border-radius: 10px;
+    margin: 0 8px 20px 8px;
+    box-shadow: 0px 0px 0px 1px #80808040;
+    position: relative;
+    overflow: hidden;
+}
+
+/* Profile card banner */
+.profile-card .banner {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 100px;
+    background-size: cover;
+    background-position: center;
+    opacity: 0.8;
+    border-top-left-radius: 10px;
+    border-top-right-radius: 10px;
+    background-image: url('/img/default-banner.svg');
+}
+
+.profile-card .content {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding-top: 92px;
+}
+
+.profile-card .avatar {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background-size: cover;
+    background-position: center;
+    background-color: var(--accent-color);
+    border: none;
+    box-shadow: 0 0 0px 4px var(--tertiary-color);
+    margin-top: -32px;
+}
+
+.profile-card.channel-card .avatar {
+    border-radius: 8px;
+    width: 80px;
+    height: 80px;
+    margin-top: -40px;
+    background-image: url('/img/default-channel.svg');
+}
+
+.profile-card .name {
+    font-size: 1.1em;
+    font-weight: bold;
+    color: var(--text-color);
+    text-align: center;
+    margin-top: 10px;
+}
+
+.profile-card .npub {
+    font-size: 0.9em;
+    color: #aaa;
+    word-break: break-all;
+    text-align: center;
+}
+
+.profile-card .about {
+    font-size: 0.95em;
+    color: #bbb;
+    text-align: center;
+    margin-top: 6px;
+    max-width: 100%;
+    overflow-wrap: break-word;
+}
+
+.profile-card .channel-stats {
+    display: flex;
+    gap: 15px;
+    margin-top: 10px;
+    font-size: 0.9em;
+    color: #888;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 10px 15px;
+    border-radius: 8px;
+    width: 100%;
+    justify-content: center;
+}
+
+.profile-card .channel-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.profile-card .channel-stat .value {
+    font-weight: bold;
+    color: var(--accent-color);
+}
+
+.profile-card .banner::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.3), rgba(0,0,0,0.1));
+    border-top-left-radius: 10px;
+    border-top-right-radius: 10px;
+}
+
+.channel-info {
+    border-radius: 4px;
+    font-family: 'Cal Sans';
+    font-size: 0.9em;
+    overflow-x: auto;
+    cursor: default;
+    user-select: none;
+    padding: 4px;
+}
+
+.channel-info pre {
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-all;
+    color: #bbb;
+}
+
+/* Update channel profile modal styles */
+#channelProfileModal .profile-modal-avatar {
+    width: 80px;
+    height: 80px;
+    border-radius: 8px;
+    background-size: cover;
+    background-position: center;
+    background-color: var(--accent-color);
+    background-image: url('/img/default-channel.svg');
+}
+
+#channelProfileModal .profile-modal-id {
+    font-size: 0.9em;
+    color: #888;
+    word-break: break-all;
+}
+
+#channelProfileModal .channel-stats {
+    display: flex;
+    gap: 20px;
+    margin: 20px 0;
+    padding: 15px;
+    background: var(--primary-color);
+    border-radius: 8px;
+    justify-content: center;
+}
+
+#channelProfileModal .channel-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+}
+
+#channelProfileModal .channel-stat .value {
+    font-size: 1.2em;
+    font-weight: bold;
+    color: var(--accent-color);
+}
+
+#channelProfileModal .channel-stat .label {
+    font-size: 0.9em;
+    color: #888;
+}
+
+/* Make header avatar a rounded square for channels, circle for DMs */
+#headerAvatar.channel-avatar {
+    border-radius: 8px !important;
+    background-image: url('/img/default-channel.svg');
+}
+#headerAvatar.dm-avatar {
+    border-radius: 50% !important;
+    background-image: url('/img/default-avatar.svg');
+} 

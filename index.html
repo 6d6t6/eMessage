@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>eMessage</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💬</text></svg>">
+    <script src="https://unpkg.com/nostr-tools@1.13.0/lib/nostr.bundle.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cal+Sans&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap" rel="stylesheet">
+    <script>
+        // Initialize nostrTools globally
+        window.nostrTools = window.NostrTools;
+        if (!window.nostrTools) {
+            console.error('Failed to load nostr-tools library');
+        }
+    </script>
+    <!-- Add Material Symbols -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+</head>
+<body>
+    <div id="loadingScreen" class="loading-screen">
+        <div class="loading-content">
+            <div class="loading-spinner"></div>
+            <h2>eMessage</h2>
+            <p class="loading-status">Initializing...</p>
+        </div>
+    </div>
+    <div class="app-container">
+        <div class="sidebar">
+            <div class="user-profile">
+                <div class="profile-header">
+                    <h2>eMessage</h2>
+                </div>
+                <div class="profile-info">
+                    <div class="avatar"></div>
+                    <div class="user-details">
+                        <span class="username">Anonymous</span>
+                        <span class="npub">Not connected</span>
+                    </div>
+                </div>
+            </div>
+            <div class="sections">
+                <div class="section">
+                    <div class="section-header">
+                        <h3>Channels</h3>
+                        <button id="newChannelBtn" class="new-channel-btn">+</button>
+                    </div>
+                    <div id="channelList" class="section-list">
+                        <!-- Channels will be populated here -->
+                    </div>
+                </div>
+                <div class="section">
+                    <div class="section-header">
+                        <h3>DMs</h3>
+                        <button id="newDMBtn" class="new-channel-btn">+</button>
+                    </div>
+                    <div id="dmList" class="section-list">
+                        <!-- DMs will be populated here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="main-content">
+            <div class="chat-header">
+                <div class="header-content">
+                    <div class="channel-info">
+                        <div class="avatar" id="headerAvatar"></div>
+                        <h2 id="currentChannel">Select a channel</h2>
+                    </div>
+                    <button class="info-btn" id="toggleSidebarBtn">
+                        <span class="material-symbols-rounded">info</span>
+                    </button>
+                </div>
+            </div>
+            <div class="messages" id="messageContainer">
+                <!-- Messages will be populated here -->
+            </div>
+            <div class="message-input">
+                <textarea id="messageInput" placeholder="Type a message..."></textarea>
+                <button id="sendMessageBtn">Send</button>
+            </div>
+        </div>
+        <div class="right-sidebar" id="rightSidebar">
+            <!-- Member list or profile will be rendered here -->
+        </div>
+    </div>
+    <div id="loginModal" class="modal">
+        <div class="modal-content">
+            <h2>Connect to Nostr</h2>
+            <p>Enter your private key to connect:</p>
+            <input type="password" id="privateKeyInput" placeholder="nsec...">
+            <button id="connectBtn">Connect</button>
+        </div>
+    </div>
+
+    <!-- New Channel Modal -->
+    <div id="newChannelModal" class="modal">
+        <div class="modal-content">
+            <h2>Create New Channel</h2>
+            <div class="form-group">
+                <label for="channelName">Channel Name</label>
+                <input type="text" id="channelName" placeholder="Enter channel name">
+            </div>
+            <div class="form-group">
+                <label for="channelDescription">Description</label>
+                <textarea id="channelDescription" placeholder="Enter channel description"></textarea>
+            </div>
+            <div class="form-group">
+                <label for="channelPicture">Channel Picture URL</label>
+                <input type="text" id="channelPicture" placeholder="Enter picture URL">
+            </div>
+            <div class="form-group">
+                <label for="channelBanner">Banner Image URL</label>
+                <input type="text" id="channelBanner" placeholder="Enter banner URL">
+            </div>
+            <div class="modal-buttons">
+                <button id="createChannelBtn">Create Channel</button>
+                <button class="cancel-btn">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- New DM Modal -->
+    <div id="newDMModal" class="modal">
+        <div class="modal-content">
+            <h2>Start New DM</h2>
+            <div class="form-group">
+                <label for="dmPubkey">Recipient's Public Key</label>
+                <input type="text" id="dmPubkey" placeholder="npub...">
+            </div>
+            <div class="modal-buttons">
+                <button id="startDMBtn">Start Chat</button>
+                <button class="cancel-btn">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Profile Modal -->
+    <div id="profileModal" class="modal">
+        <div class="modal-content">
+            <div class="profile-modal-header">
+                <div class="profile-modal-avatar"></div>
+                <div class="profile-modal-info">
+                    <h2 class="profile-modal-name"></h2>
+                    <span class="profile-modal-npub"></span>
+                </div>
+            </div>
+            <div class="profile-modal-about"></div>
+            <div class="modal-buttons">
+                <button class="cancel-btn">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Channel Profile Modal -->
+    <div class="modal" id="channelProfileModal">
+        <div class="modal-content">
+            <div class="profile-modal-header">
+                <div class="profile-modal-avatar" id="channelProfileAvatar"></div>
+                <div class="profile-modal-info">
+                    <h2 class="profile-modal-name" id="channelProfileName"></h2>
+                    <div class="profile-modal-id" id="channelProfileId"></div>
+                </div>
+            </div>
+            <div class="profile-modal-about" id="channelProfileAbout"></div>
+            <div class="channel-stats" id="channelProfileStats"></div>
+            <div class="modal-buttons">
+                <button class="cancel-btn">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html> 
