@@ -3,176 +3,580 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>eMessage</title>
+    <title>emessage</title>
+    <link rel="icon" type="image/x-icon" href="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iNCIgZmlsbD0iIzNiODJmNiIvPgo8cGF0aCBkPSJNMTYgOEwxMiAxMkwxNiAxNkwxNiA4WiIgZmlsbD0id2hpdGUiLz4KPHBhdGggZD0iTTE2IDI0TDEyIDIwTDE2IDE2TDE2IDI0WiIgZmlsbD0id2hpdGUiLz4KPC9zdmc+" />
     <link rel="stylesheet" href="styles.css">
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💬</text></svg>">
-    <script src="https://unpkg.com/nostr-tools@1.13.0/lib/nostr.bundle.js"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Cal+Sans&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap" rel="stylesheet">
-    <script>
-        // Initialize nostrTools globally
-        window.nostrTools = window.NostrTools;
-        if (!window.nostrTools) {
-            console.error('Failed to load nostr-tools library');
-        }
-    </script>
-    <!-- Add Material Symbols -->
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
 </head>
 <body>
-    <div id="loadingScreen" class="loading-screen">
-        <div class="loading-content">
-            <div class="loading-spinner"></div>
-            <h2>eMessage</h2>
-            <p class="loading-status">Initializing...</p>
-        </div>
-    </div>
-    <div class="app-container">
-        <div class="sidebar">
-            <div class="user-profile">
-                <div class="profile-header">
-                    <h2>eMessage</h2>
-                </div>
-                <div class="profile-info">
-                    <div class="avatar"></div>
-                    <div class="user-details">
-                        <span class="username">Anonymous</span>
-                        <span class="npub">Not connected</span>
-                    </div>
+    <div class="auth-container" id="authContainer">
+        <div class="auth-card">
+            <div class="auth-brand">
+                <span class="material-symbols-rounded">shield</span>
+                <div>
+                    <h1>emessage</h1>
+                    <p>Private, reliable messaging with your keys.</p>
                 </div>
             </div>
-            <div class="sections">
-                <div class="section">
-                    <div class="section-header">
-                        <h3>Channels</h3>
-                        <button id="newChannelBtn" class="new-channel-btn">+</button>
-                    </div>
-                    <div id="channelList" class="section-list">
-                        <!-- Channels will be populated here -->
-                    </div>
-                </div>
-                <div class="section">
-                    <div class="section-header">
-                        <h3>DMs</h3>
-                        <button id="newDMBtn" class="new-channel-btn">+</button>
-                    </div>
-                    <div id="dmList" class="section-list">
-                        <!-- DMs will be populated here -->
-                    </div>
-                </div>
+            <div class="auth-tabs">
+                <button class="auth-tab active" data-auth-tab="signin" onclick="showAuthStep('signin')">Sign In</button>
+                <button class="auth-tab" data-auth-tab="signup" onclick="showAuthStep('signup')">Sign Up</button>
             </div>
-        </div>
-        <div class="main-content">
-            <div class="chat-header">
-                <div class="header-content">
-                    <div class="channel-info">
-                        <div class="avatar" id="headerAvatar"></div>
-                        <h2 id="currentChannel">Select a channel</h2>
-                    </div>
-                    <button class="info-btn" id="toggleSidebarBtn">
-                        <span class="material-symbols-rounded">info</span>
+            <div class="auth-panel active" id="auth-signin">
+                <form class="auth-section" onsubmit="event.preventDefault(); signInWithNsec();">
+                    <label for="signInNsecInput">Sign in with nsec</label>
+                    <input type="password" id="signInNsecInput" placeholder="nsec1..." autocomplete="off">
+                    <button class="btn btn-primary" type="submit">
+                        <span class="material-symbols-rounded">lock_open</span>
+                        Sign In
+                    </button>
+                </form>
+                <div class="auth-divider">or</div>
+                <button class="btn btn-secondary" onclick="signInWithExtension()">
+                    <span class="material-symbols-rounded">extension</span>
+                    Sign In with Extension
+                </button>
+            </div>
+            <div class="auth-panel" id="auth-signup">
+                <h3>Create a new keypair</h3>
+                <p>Your keys never leave this device. You can export them from settings after setup.</p>
+                <button class="btn btn-primary" onclick="startSignUp()">
+                    <span class="material-symbols-rounded">key</span>
+                    Generate New Keypair
+                </button>
+            </div>
+            <div class="auth-panel" id="auth-profile">
+                <h3>Optional profile setup</h3>
+                <p>Add a display name, bio, and NIP-05. You can edit this later.</p>
+                <div class="form-group">
+                    <label for="authDisplayNameInput">Display name</label>
+                    <input type="text" id="authDisplayNameInput" placeholder="Satoshi">
+                </div>
+                <div class="form-group">
+                    <label for="authNameInput">Username</label>
+                    <input type="text" id="authNameInput" placeholder="satoshi">
+                </div>
+                <div class="form-group">
+                    <label for="authAboutInput">About</label>
+                    <textarea id="authAboutInput" placeholder="Tell people about yourself"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="authPictureInput">Profile image URL</label>
+                    <input type="text" id="authPictureInput" placeholder="https://...">
+                </div>
+                <div class="form-group">
+                    <label for="authBannerInput">Banner URL</label>
+                    <input type="text" id="authBannerInput" placeholder="https://...">
+                </div>
+                <div class="form-group">
+                    <label for="authWebsiteInput">Website</label>
+                    <input type="text" id="authWebsiteInput" placeholder="https://...">
+                </div>
+                <div class="form-group">
+                    <label for="authNip05Input">NIP-05 identifier</label>
+                    <input type="text" id="authNip05Input" placeholder="name@domain.tld">
+                    <div class="nip05-status" id="authNip05Status">Not verified</div>
+                </div>
+                <div class="form-group">
+                    <label for="authLud16Input">Lightning address (lud16)</label>
+                    <input type="text" id="authLud16Input" placeholder="name@domain.tld">
+                </div>
+                <div class="auth-actions">
+                    <button class="btn btn-secondary" onclick="skipProfileSetup()">Skip for now</button>
+                    <button class="btn btn-primary" onclick="saveProfileAndContinue('auth')">
+                        <span class="material-symbols-rounded">check</span>
+                        Save & Continue
                     </button>
                 </div>
             </div>
-            <div class="messages" id="messageContainer">
-                <!-- Messages will be populated here -->
-            </div>
-            <div class="message-input">
-                <textarea id="messageInput" placeholder="Type a message..."></textarea>
-                <button id="sendMessageBtn">Send</button>
-            </div>
-        </div>
-        <div class="right-sidebar" id="rightSidebar">
-            <!-- Member list or profile will be rendered here -->
-        </div>
-    </div>
-    <div id="loginModal" class="modal">
-        <div class="modal-content">
-            <h2>Connect to Nostr</h2>
-            <p>Enter your private key to connect:</p>
-            <input type="password" id="privateKeyInput" placeholder="nsec...">
-            <button id="connectBtn">Connect</button>
         </div>
     </div>
 
-    <!-- New Channel Modal -->
-    <div id="newChannelModal" class="modal">
-        <div class="modal-content">
-            <h2>Create New Channel</h2>
-            <div class="form-group">
-                <label for="channelName">Channel Name</label>
-                <input type="text" id="channelName" placeholder="Enter channel name">
-            </div>
-            <div class="form-group">
-                <label for="channelDescription">Description</label>
-                <textarea id="channelDescription" placeholder="Enter channel description"></textarea>
-            </div>
-            <div class="form-group">
-                <label for="channelPicture">Channel Picture URL</label>
-                <input type="text" id="channelPicture" placeholder="Enter picture URL">
-            </div>
-            <div class="form-group">
-                <label for="channelBanner">Banner Image URL</label>
-                <input type="text" id="channelBanner" placeholder="Enter banner URL">
-            </div>
-            <div class="modal-buttons">
-                <button id="createChannelBtn">Create Channel</button>
-                <button class="cancel-btn">Cancel</button>
-            </div>
-        </div>
-    </div>
+    <div class="app-container" id="appContainer" style="display: none;">
+        <!-- Main Chat Interface -->
+        <div class="chat-container">
+            <!-- Chat Content -->
+            <div class="chat-content">
+                <!-- Chat Interface (Default view) -->
+                <div class="chat-interface" id="chatInterface">
+                    <!-- Conversations Sidebar -->
+                    <aside class="conversations-sidebar" style="cursor: default; user-select: none; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none;">
+                        <div class="conversations-header">
+                            <h3>Conversations</h3>
+                            <button class="new-chat-btn" onclick="showNewChatModal()">
+                                <span class="material-symbols-rounded">add</span>
+                            </button>
+                        </div>
+                        <div class="conversations-list" id="conversationsList">
+                            <div class="no-conversations">
+                                <span class="material-symbols-rounded">chat</span>
+                                <p>No conversations yet</p>
+                                <span>Start a new conversation to begin messaging</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Connection Status Bar -->
+                        <div class="connection-status-bar">
+                            <div class="connection-indicator">
+                                <div class="status-dot" id="connectionDot"></div>
+                                <span id="connectionText" style="cursor: default; user-select: none; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none;">Connected</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Mini Profile -->
+                        <div class="mini-profile" id="miniProfile">
+                            <div class="profile-avatar">
+                                <span class="material-symbols-rounded">person</span>
+                            </div>
+                            <div class="profile-info">
+                                <div class="profile-name">Your Profile</div>
+                                <div class="profile-npub" id="profileNpub">Not set</div>
+                            </div>
+                            <button class="profile-settings-btn" onclick="toggleSettings()" title="Settings">
+                                <span class="material-symbols-rounded">settings</span>
+                            </button>
+                        </div>
+                    </aside>
 
-    <!-- New DM Modal -->
-    <div id="newDMModal" class="modal">
-        <div class="modal-content">
-            <h2>Start New DM</h2>
-            <div class="form-group">
-                <label for="dmPubkey">Recipient's Public Key</label>
-                <input type="text" id="dmPubkey" placeholder="npub...">
-            </div>
-            <div class="modal-buttons">
-                <button id="startDMBtn">Start Chat</button>
-                <button class="cancel-btn">Cancel</button>
-            </div>
-        </div>
-    </div>
+                    <!-- Chat Area -->
+                    <div class="chat-area">
+                        <div class="chat-placeholder" id="chatPlaceholder">
+                            <div class="placeholder-content">
+                                <span class="material-symbols-rounded">chat_bubble</span>
+                                <h3>emessage</h3>
+                                <p>Start a new conversation to begin messaging</p>
+                                <button class="btn btn-primary" onclick="showNewChatModal()">
+                                    <span class="material-symbols-rounded">add</span>
+                                    New Conversation
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="messages-area" id="messagesArea" style="display: none;">
+                            <!-- Chat Header -->
+                            <div class="chat-header" id="chatHeader">
+                                <div class="chat-title">
+                                    <button class="chat-back-btn" onclick="showConversationsList()" title="Back to conversations">
+                                        <span class="material-symbols-rounded">arrow_back</span>
+                                    </button>
+                                    <h3 id="chatTitle">Select a conversation</h3>
+                                </div>
+                                                            <div class="chat-actions">
+                                <button class="conversation-details-btn" onclick="toggleProfilePanel()" title="Profile Details">
+                                    <span class="material-symbols-rounded">info</span>
+                                </button>
+                            </div>
+                            </div>
+                            
+                            <div class="messages-container" id="messagesContainer">
+                                <!-- Messages will be displayed here -->
+                            </div>
+                        </div>
 
-    <!-- Profile Modal -->
-    <div id="profileModal" class="modal">
-        <div class="modal-content">
-            <div class="profile-modal-header">
-                <div class="profile-modal-avatar"></div>
-                <div class="profile-modal-info">
-                    <h2 class="profile-modal-name"></h2>
-                    <span class="profile-modal-npub"></span>
+                        <div class="message-input-container" id="messageInputContainer" style="display: none;">
+                            <div class="input-wrapper">
+                                <textarea 
+                                    id="messageInput" 
+                                    placeholder="Type your message..." 
+                                    onkeydown="handleMessageKeydown(event)"
+                                ></textarea>
+                                <button class="send-btn" onclick="sendCurrentMessage()">
+                                    <span class="material-symbols-rounded">send</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <aside class="profile-panel" id="profilePanel">
+                        <div class="profile-panel-header-bar">
+                            <h3>Details</h3>
+                            <button class="profile-panel-close" onclick="toggleProfilePanel()">
+                                <span class="material-symbols-rounded">close</span>
+                            </button>
+                        </div>
+                        <div class="profile-panel-banner" id="profilePanelBanner"></div>
+                        <div class="profile-panel-body" id="profilePanelBody"></div>
+                    </aside>
                 </div>
             </div>
-            <div class="profile-modal-about"></div>
-            <div class="modal-buttons">
-                <button class="cancel-btn">Close</button>
-            </div>
         </div>
-    </div>
 
-    <!-- Add Channel Profile Modal -->
-    <div class="modal" id="channelProfileModal">
-        <div class="modal-content">
-            <div class="profile-modal-header">
-                <div class="profile-modal-avatar" id="channelProfileAvatar"></div>
-                <div class="profile-modal-info">
-                    <h2 class="profile-modal-name" id="channelProfileName"></h2>
-                    <div class="profile-modal-id" id="channelProfileId"></div>
+        <!-- Settings Modal -->
+        <div class="modal-overlay" id="settingsModal">
+            <div class="settings-modal">
+                <div class="settings-modal-header">
+                    <div class="modal-brand">
+                        <span class="material-symbols-rounded">shield</span>
+                        <div class="brand-text">
+                            <h1>Settings</h1>
+                    </div>
+                </div>
+                <button class="close-settings-btn" onclick="toggleSettings()">
+                        <span class="material-symbols-rounded">close</span>
+                </button>
+            </div>
+            
+                <div class="settings-modal-content">
+                    <!-- Settings Sidebar -->
+                    <aside class="settings-sidebar">
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <h3>Settings</h3>
+                <div class="nav-item active" onclick="showSection('keys')">
+                                    <span class="material-symbols-rounded">encrypted</span>
+                    <span>Key Management</span>
+                </div>
+                <div class="nav-item" onclick="showSection('profile')">
+                                    <span class="material-symbols-rounded">person</span>
+                    <span>Profile</span>
+                </div>
+                    <div class="nav-item" onclick="showSection('relay')">
+                                    <span class="material-symbols-rounded">power</span>
+                    <span>Relay Connection</span>
+                </div>
+                <div class="nav-item" onclick="showSection('messages')">
+                                    <span class="material-symbols-rounded">chat</span>
+                    <span>Messages</span>
+                </div>
+                </div>
+                
+                <div class="nav-section">
+                    <h3>Status</h3>
+                <div class="status-item">
+                        <span>Connection</span>
+                        <span class="status-value" id="connectionStatus">Disconnected</span>
+                </div>
+                <div class="status-item">
+                        <span>Keys</span>
+                        <span class="status-value" id="keysStatus">Not Set</span>
+                </div>
+                <div class="status-item">
+                        <span>Messages</span>
+                        <span class="status-value" id="messagesStatus">0</span>
+                    </div>
+                </div>
+            </nav>
+        </aside>
+
+                    <!-- Settings Content -->
+                    <div class="settings-content">
+                    <!-- Key Management Section -->
+                    <div class="content-section active" id="keys-section">
+                        <div class="section-header">
+                                <span class="material-symbols-rounded">encrypted</span>
+                            <h2>Key Management</h2>
+                                </div>
+
+                        <div class="section-card">
+                            <h3>Generate New Keys</h3>
+                            <p>Create a new key pair for secure messaging</p>
+                            <button class="btn btn-primary" onclick="generateKeys()">
+                                    <span class="material-symbols-rounded">add</span>
+                                Generate Keys
+                            </button>
+                            </div>
+                            
+                        <div class="section-card">
+                            <h3>Import Existing Keys</h3>
+                            <div class="form-group">
+                                <label for="privateKeyInput">Private Key (nsec or hex)</label>
+                                <input type="text" id="privateKeyInput" placeholder="nsec1... or 64-char hex">
+                            </div>
+                            <button class="btn btn-secondary" onclick="importKeysFromInput()">
+                                    <span class="material-symbols-rounded">download</span>
+                                Import Keys
+                            </button>
+                        </div>
+
+                        <div class="section-card">
+                            <h3>Current Keys</h3>
+                            <div class="key-display">
+                                <div class="key-item">
+                                    <label>Public Key:</label>
+                                    <div class="key-value" id="publicKeyDisplay">
+                                        <span>Not set</span>
+                                        <button class="copy-btn" onclick="copyToClipboard('publicKeyDisplay')">
+                                                <span class="material-symbols-rounded">content_copy</span>
+                                    </button>
+                                </div>
+                            </div>
+                                <div class="key-item">
+                                    <label>Private Key:</label>
+                                    <div class="key-value" id="privateKeyDisplay">
+                                        <span>Not set</span>
+                                        <button class="copy-btn" id="togglePrivateVisibilityBtn" onclick="togglePrivateKeyVisibility()" title="Show/Hide">
+                                            <span class="material-symbols-rounded" id="privateVisibilityIcon">visibility_off</span>
+                                        </button>
+                                        <button class="copy-btn" onclick="copyPrivateNsecFromDisplay()" title="Copy nsec">
+                                            <span class="material-symbols-rounded">content_copy</span>
+                                        </button>
+                                    </div>
+                                </div>
+                                </div>
+                        </div>
+                        
+                            <div class="info-box">
+                                <span class="material-symbols-rounded">info</span>
+                                <div>
+                                    <h3>Nostr Keys</h3>
+                                    <p>Generate or import your Nostr keys to start messaging. Your keys are stored locally and never shared.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                    <div class="content-section" id="profile-section">
+                        <div class="section-header">
+                                <span class="material-symbols-rounded">person</span>
+                            <h2>Profile</h2>
+                        </div>
+                        <div class="section-card">
+                            <h3>Profile Metadata</h3>
+                            <p>Update your public profile details and publish them to your relays.</p>
+                            <div class="form-group">
+                                <label for="profileDisplayNameInput">Display name</label>
+                                <input type="text" id="profileDisplayNameInput" placeholder="Satoshi">
+                            </div>
+                            <div class="form-group">
+                                <label for="profileNameInput">Username</label>
+                                <input type="text" id="profileNameInput" placeholder="satoshi">
+                            </div>
+                            <div class="form-group">
+                                <label for="profileAboutInput">About</label>
+                                <textarea id="profileAboutInput" placeholder="Tell people about yourself"></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label for="profilePictureInput">Profile image URL</label>
+                                <input type="text" id="profilePictureInput" placeholder="https://...">
+                            </div>
+                            <div class="form-group">
+                                <label for="profileBannerInput">Banner URL</label>
+                                <input type="text" id="profileBannerInput" placeholder="https://...">
+                            </div>
+                            <div class="form-group">
+                                <label for="profileWebsiteInput">Website</label>
+                                <input type="text" id="profileWebsiteInput" placeholder="https://...">
+                            </div>
+                            <div class="form-group">
+                                <label for="profileNip05Input">NIP-05 identifier</label>
+                                <input type="text" id="profileNip05Input" placeholder="name@domain.tld">
+                                <div class="nip05-status" id="profileNip05Status">Not verified</div>
+                                <button class="btn btn-secondary btn-small" onclick="verifyNip05FromForm('profile')">Verify NIP-05</button>
+                            </div>
+                            <div class="form-group">
+                                <label for="profileLud16Input">Lightning address (lud16)</label>
+                                <input type="text" id="profileLud16Input" placeholder="name@domain.tld">
+                            </div>
+                            <div class="form-actions">
+                                <button class="btn btn-secondary" onclick="saveProfileFromSettings(false)">Save Locally</button>
+                                <button class="btn btn-primary" onclick="saveProfileFromSettings(true)">
+                                        <span class="material-symbols-rounded">public</span>
+                                    Publish to Relays
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                        <!-- Relay Connection Section -->
+                        <div class="content-section" id="relay-section">
+                            <div class="section-header">
+                                <span class="material-symbols-rounded">power</span>
+                                <h2>Relay Connection</h2>
+                            </div>
+                            
+                        <div class="section-card">
+                            <h3>Relay Pool</h3>
+                            <p>Use multiple reputable relays for reliability. You can add or disable any relay.</p>
+                            <div id="relaySummary" class="relay-summary">Connected 0/0 enabled relays</div>
+                            <div id="relayList" class="relay-list"></div>
+                            <div class="relay-actions">
+                                <input type="text" id="relayAddInput" placeholder="wss://your-relay.com">
+                                <button class="btn btn-secondary btn-small" onclick="addRelay()">Add Relay</button>
+                            </div>
+                            <button class="btn btn-primary" id="relayToggleBtn" onclick="toggleRelayConnection()">
+                                    <span class="material-symbols-rounded" id="relayToggleIcon">power</span>
+                                <span id="relayToggleText">Connect</span>
+                                    </button>
+                            </div>
+                            
+                        <div class="section-card">
+                            <h3>Connection Status</h3>
+                            <div class="connection-status" id="connectionStatusSettings">
+                                    <div class="status-icon">
+                                        <span class="material-symbols-rounded">signal_cellular_alt</span>
+                                    </div>
+                                    <div class="status-info">
+                                        <span class="status-label">Connection Status</span>
+                                    <span class="status-value">Disconnected</span>
+                                </div>
+                            </div>
+                        </div>
+
+                            <div class="info-box">
+                                <span class="material-symbols-rounded">info</span>
+                                <div>
+                                    <h3>Nostr Relays</h3>
+                                    <ul>
+                                        <li>Connect to a Nostr relay to send and receive messages</li>
+                                        <li>Messages are encrypted and routed through the relay</li>
+                                        <li>You can use any public Nostr relay</li>
+                                        <li>Your keys and messages remain private</li>
+                                    </ul>
+                                </div>
+                            </div>
+                    </div>
+
+                <!-- Messages Section -->
+                    <div class="content-section" id="messages-section">
+                        <div class="section-header">
+                                <span class="material-symbols-rounded">chat</span>
+                            <h2>Messages</h2>
+                        </div>
+                        
+                        <div class="section-card">
+                            <h3>Test Messaging</h3>
+                            <div class="form-group">
+                                <label for="testRecipientInput">Recipient Public Key</label>
+                                <input type="text" id="testRecipientInput" placeholder="Enter recipient's public key">
+                            </div>
+                            <div class="form-group">
+                                <label for="testMessageInput">Message</label>
+                                <textarea id="testMessageInput" placeholder="Enter your message"></textarea>
+                            </div>
+                            <button class="btn btn-primary" onclick="sendMessage()">
+                                    <span class="material-symbols-rounded">send</span>
+                                Send Message
+                            </button>
+                                    </div>
+
+                        <div class="section-card">
+                            <h3>Received Messages</h3>
+                            <div id="messagesDisplay">
+                                <div class="no-messages">
+                                        <span class="material-symbols-rounded">inbox</span>
+                                    <p>No messages yet</p>
+                                    <span>Messages will appear here when received</span>
+                                </div>
+                            </div>
+                            <button class="btn btn-secondary" onclick="clearMessages()">
+                                    <span class="material-symbols-rounded">delete</span>
+                                Clear Messages
+                                    </button>
+                            </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="section-card">
+                            <h3>Session</h3>
+                            <p>Sign out to remove keys from this device.</p>
+                            <button class="btn btn-secondary" onclick="signOut()">
+                                    <span class="material-symbols-rounded">logout</span>
+                                Sign Out
+                            </button>
+                        </div>
+                    </div>
+
+        <!-- New Chat Modal -->
+        <div class="modal-overlay" id="newChatModal">
+            <div class="modal">
+                <div class="modal-header">
+                    <h3>New Conversation</h3>
+                    <button class="close-btn" onclick="closeNewChatModal()">
+                        <span class="material-symbols-rounded">close</span>
+                    </button>
+                </div>
+                <div class="modal-content">
+                    <div class="form-group">
+                        <label for="recipientPubkeyInput">Recipient Public Key</label>
+                        <input type="text" id="recipientPubkeyInput" placeholder="Enter recipient's public key (hex or npub1)">
+                    </div>
+                    <div class="modal-actions">
+                        <button class="btn btn-secondary" onclick="closeNewChatModal()">Cancel</button>
+                        <button class="btn btn-primary" onclick="startNewConversation()">Start Conversation</button>
+                    </div>
                 </div>
             </div>
-            <div class="profile-modal-about" id="channelProfileAbout"></div>
-            <div class="channel-stats" id="channelProfileStats"></div>
-            <div class="modal-buttons">
-                <button class="cancel-btn">Close</button>
+        </div>
+    </div>
+
+    <!-- Context Menu -->
+    <div class="context-menu" id="contextMenu">
+        <div class="context-menu-item" onclick="copyMessageText()">
+            <span class="material-symbols-rounded">content_copy</span>
+            Copy Message
+        </div>
+        <div class="context-menu-item" onclick="copyMessageId()">
+            <span class="material-symbols-rounded">tag</span>
+            Copy Message ID
+        </div>
+        <div class="context-menu-separator"></div>
+        <div class="context-menu-item" onclick="inspectEvent()">
+            <span class="material-symbols-rounded">search</span>
+            Inspect Event
+        </div>
+    </div>
+
+    <!-- Event Inspector Modal -->
+    <div class="event-inspector-modal" id="eventInspectorModal">
+        <div class="event-inspector-content">
+            <div class="event-inspector-header">
+                <h3>Event Inspector</h3>
+                <button class="event-inspector-close" onclick="closeEventInspector()">
+                    <span class="material-symbols-rounded">close</span>
+                </button>
+            </div>
+            <div class="event-inspector-body" id="eventInspectorBody">
+                <!-- Event details will be populated here -->
+            </div>
+            <div class="event-inspector-actions">
+                <button class="btn btn-secondary" onclick="closeEventInspector()">Close</button>
+                <button class="btn btn-primary" onclick="copyEventToClipboard()">
+                    <span class="material-symbols-rounded">content_copy</span>
+                    Copy Event
+                </button>
             </div>
         </div>
     </div>
 
-    <script src="app.js"></script>
+    <!-- Conversation Details Modal -->
+    <div class="conversation-details-modal" id="conversationDetailsModal">
+        <div class="conversation-details-content">
+            <div class="conversation-details-header">
+                <h3>Conversation Details</h3>
+                <button class="conversation-details-close" onclick="closeConversationDetails()">
+                    <span class="material-symbols-rounded">close</span>
+                </button>
+            </div>
+            <div class="conversation-details-body" id="conversationDetailsBody">
+                <!-- Conversation details will be populated here -->
+            </div>
+            <div class="conversation-details-actions">
+                <button class="btn btn-secondary" onclick="closeConversationDetails()">Close</button>
+                <button class="btn btn-primary" onclick="copyConversationDetailsToClipboard()">
+                    <span class="material-symbols-rounded">content_copy</span>
+                    Copy Details
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Load NostrTools first -->
+    <script src="nostr-tools.js"></script>
+    
+    <!-- Load modular JavaScript files in dependency order -->
+    <script src="js/config.js"></script>
+    <script src="js/avatar.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/storage.js"></script>
+    <script src="js/keys.js"></script>
+    <script src="js/profile.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/crypto.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/relay.js"></script>
+    <script src="js/incognito.js"></script>
+    <script src="js/chat.js"></script>
+    <script src="js/context-menu.js"></script>
+    <script src="js/app.js"></script>
 </body>
 </html> 

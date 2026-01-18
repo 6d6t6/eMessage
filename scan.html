@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dot Code Scanner - Decode Nostr Avatars</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a1a;
+            color: #ffffff;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .header {
+            background: #2d2d2d;
+            padding: 20px;
+            text-align: center;
+            border-bottom: 1px solid #404040;
+        }
+        
+        .header h1 {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        
+        .header p {
+            color: #b0b0b0;
+            font-size: 14px;
+        }
+        
+        .container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            gap: 20px;
+        }
+        
+        .scan-section {
+            background: #2d2d2d;
+            border-radius: 12px;
+            padding: 24px;
+            width: 100%;
+            max-width: 500px;
+            border: 1px solid #404040;
+        }
+        
+        .scan-section h2 {
+            font-size: 18px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .scan-section h2::before {
+            content: "🔍";
+            font-size: 20px;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            background: #007AFF;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: background 0.2s;
+        }
+        
+        .btn:hover {
+            background: #0056CC;
+        }
+        
+        .btn:disabled {
+            background: #404040;
+            cursor: not-allowed;
+        }
+        
+        .btn-secondary {
+            background: #404040;
+        }
+        
+        .btn-secondary:hover {
+            background: #505050;
+        }
+        
+        .video-container {
+            position: relative;
+            width: 100%;
+            max-width: 400px;
+            margin: 0 auto 20px;
+            border-radius: 12px;
+            overflow: hidden;
+            background: #000;
+        }
+        
+        #video {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+        
+        .scan-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        
+        .scan-circle {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 200px;
+            height: 200px;
+            border: 3px solid rgba(0, 122, 255, 0.5);
+            border-radius: 50%;
+            transition: all 0.3s ease;
+        }
+        
+        .scan-circle.detecting {
+            border-color: #28a745;
+            box-shadow: 0 0 20px rgba(40, 167, 69, 0.5);
+            animation: pulse 1s infinite;
+        }
+        
+        .scan-status {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            text-align: center;
+        }
+        
+        @keyframes pulse {
+            0% { transform: translate(-50%, -50%) scale(1); }
+            50% { transform: translate(-50%, -50%) scale(1.05); }
+            100% { transform: translate(-50%, -50%) scale(1); }
+        }
+        
+        .canvas-container {
+            width: 100%;
+            max-width: 400px;
+            margin: 0 auto 20px;
+            border-radius: 12px;
+            overflow: hidden;
+            background: #000;
+        }
+        
+        #canvas {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+        
+        .result-section {
+            background: #2d2d2d;
+            border-radius: 12px;
+            padding: 24px;
+            width: 100%;
+            max-width: 500px;
+            border: 1px solid #404040;
+        }
+        
+        .result-section h2 {
+            font-size: 18px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .result-section h2::before {
+            content: "📋";
+            font-size: 20px;
+        }
+        
+        .result-info {
+            background: #1a1a1a;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 16px;
+            border: 1px solid #404040;
+        }
+        
+        .result-info strong {
+            color: #007AFF;
+        }
+        
+        .result-info.success {
+            border-color: #28a745;
+        }
+        
+        .result-info.error {
+            border-color: #dc3545;
+        }
+        
+        .copy-btn {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            margin-left: 8px;
+        }
+        
+        .copy-btn:hover {
+            background: #218838;
+        }
+        
+        .file-input {
+            display: none;
+        }
+        
+        .upload-area {
+            border: 2px dashed #404040;
+            border-radius: 8px;
+            padding: 40px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.2s;
+            margin-bottom: 20px;
+        }
+        
+        .upload-area:hover {
+            border-color: #007AFF;
+        }
+        
+        .upload-area.dragover {
+            border-color: #007AFF;
+            background: rgba(0, 122, 255, 0.1);
+        }
+        
+        .upload-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+            opacity: 0.7;
+        }
+        
+        .upload-text {
+            color: #b0b0b0;
+            font-size: 14px;
+        }
+        
+        .status {
+            text-align: center;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            font-size: 14px;
+        }
+        
+        .status.success {
+            background: rgba(40, 167, 69, 0.2);
+            border: 1px solid #28a745;
+            color: #28a745;
+        }
+        
+        .status.error {
+            background: rgba(220, 53, 69, 0.2);
+            border: 1px solid #dc3545;
+            color: #dc3545;
+        }
+        
+        .status.info {
+            background: rgba(0, 122, 255, 0.2);
+            border: 1px solid #007AFF;
+            color: #007AFF;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🔍 Dot Code Scanner</h1>
+        <p class="subtitle">Decode Nostr avatar patterns to extract npub keys</p>
+    </div>
+    
+    <div class="container">
+        <div class="scan-section">
+            <h2>Scan Dot Code</h2>
+            
+            <div class="button-group">
+                <button class="btn" onclick="startCamera()">
+                    📷 Start Camera
+                </button>
+                <button class="btn btn-secondary" onclick="uploadImage()">
+                    📁 Upload Image
+                </button>
+                <button class="btn" onclick="captureAndDecode()" id="captureBtn" disabled>
+                    🎯 Capture & Decode
+                </button>
+                <button class="btn btn-secondary" onclick="stopCamera()" id="stopBtn" disabled>
+                    ⏹️ Stop Camera
+                </button>
+            </div>
+            
+            <div class="upload-area" id="uploadArea" onclick="uploadImage()">
+                <div class="upload-icon">📁</div>
+                <div class="upload-text">Click to upload or drag & drop an image</div>
+            </div>
+            
+            <div class="video-container" id="videoContainer" style="display: none;">
+                <video id="video" autoplay muted></video>
+                <div class="scan-overlay">
+                    <div class="scan-circle" id="scanCircle"></div>
+                    <div class="scan-status" id="scanStatus">Point camera at dot code</div>
+                </div>
+            </div>
+            
+            <div class="canvas-container" id="canvasContainer" style="display: none;">
+                <canvas id="canvas"></canvas>
+            </div>
+            
+            <div id="status" class="status info" style="display: none;">
+                Ready to scan
+            </div>
+        </div>
+        
+        <div class="result-section">
+            <h2>Decoded Result</h2>
+            <div id="resultInfo" class="result-info">
+                <strong>Status:</strong> No scan performed yet
+            </div>
+        </div>
+    </div>
+    
+    <input type="file" id="imageUpload" class="file-input" accept="image/*">
+    
+    <script src="js/utils.js"></script>
+    <script src="js/avatar.js"></script>
+    <script>
+        let stream = null;
+        let isScanning = false;
+        let scanInterval = null;
+        let lastCaptureTime = 0;
+        
+        // Initialize scanner
+        function initScanner() {
+            // Set up drag and drop
+            const uploadArea = document.getElementById('uploadArea');
+            
+            uploadArea.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadArea.classList.add('dragover');
+            });
+            
+            uploadArea.addEventListener('dragleave', () => {
+                uploadArea.classList.remove('dragover');
+            });
+            
+            uploadArea.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadArea.classList.remove('dragover');
+                
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    handleImageFile(files[0]);
+                }
+            });
+            
+            showStatus('Ready to scan dot codes', 'info');
+        }
+        
+        // Start camera with auto-scanning
+        async function startCamera() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        facingMode: 'environment',
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    } 
+                });
+                
+                const video = document.getElementById('video');
+                video.srcObject = stream;
+                
+                document.getElementById('videoContainer').style.display = 'block';
+                document.getElementById('captureBtn').disabled = false;
+                document.getElementById('stopBtn').disabled = false;
+                
+                showStatus('Camera started. Point at a dot code - auto-scanning enabled!', 'info');
+                
+                // Start auto-scanning
+                startAutoScan();
+            } catch (err) {
+                showStatus('Error starting camera: ' + err.message, 'error');
+            }
+        }
+        
+        // Stop camera
+        function stopCamera() {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+                document.getElementById('video').srcObject = null;
+                document.getElementById('videoContainer').style.display = 'none';
+                document.getElementById('captureBtn').disabled = true;
+                document.getElementById('stopBtn').disabled = true;
+                
+                // Clean up auto-scanning
+                if (scanInterval) {
+                    clearInterval(scanInterval);
+                    scanInterval = null;
+                }
+                isScanning = false;
+                
+                showStatus('Camera stopped', 'info');
+            }
+        }
+        
+        // Upload image
+        function uploadImage() {
+            document.getElementById('imageUpload').click();
+        }
+        
+        // Handle image file selection
+        document.getElementById('imageUpload').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                handleImageFile(file);
+            }
+        });
+        
+        // Handle image file
+        function handleImageFile(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    try {
+                        console.log('Attempting to decode image:', file.name);
+                        const decodedString = decodeSpiralAvatarFromImage(img, 200);
+                        console.log('Decoded result:', decodedString);
+                        console.log('Decoded length:', decodedString.length);
+                        
+                        showResult(decodedString, file.name, img.width, img.height);
+                        showStatus('Image decoded successfully!', 'success');
+                    } catch (error) {
+                        console.error('Decoding error:', error);
+                        showResult(null, file.name, img.width, img.height, error.message);
+                        showStatus('Failed to decode image: ' + error.message, 'error');
+                    }
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+        
+        // Manual capture and decode (fallback)
+        function captureAndDecode() {
+            if (!stream) return;
+            
+            const video = document.getElementById('video');
+            const canvas = document.getElementById('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            canvas.width = 400;
+            canvas.height = 400;
+            
+            // Draw current video frame to canvas
+            ctx.drawImage(video, 0, 0, 400, 400);
+            
+            document.getElementById('canvasContainer').style.display = 'block';
+            
+            showStatus('🎯 Manual capture - attempting to decode...', 'info');
+            
+            try {
+                const decodedString = decodeSpiralAvatarFromImage(canvas, 200);
+                if (decodedString && decodedString.length > 10) {
+                    showResult(decodedString, 'Manual Capture', 400, 400);
+                    showStatus('✅ Dot code decoded successfully!', 'success');
+                } else {
+                    showResult(null, 'Manual Capture', 400, 400, 'No valid dot code pattern found');
+                    showStatus('❌ No valid dot code pattern detected', 'error');
+                }
+            } catch (error) {
+                showResult(null, 'Manual Capture', 400, 400, error.message);
+                showStatus('❌ Failed to decode: ' + error.message, 'error');
+            }
+        }
+        
+        // Show result
+        function showResult(decodedString, source, width, height, error = null) {
+            const resultInfo = document.getElementById('resultInfo');
+            
+            if (error) {
+                resultInfo.className = 'result-info error';
+                resultInfo.innerHTML = `
+                    <strong>Source:</strong> ${source}<br>
+                    <strong>Size:</strong> ${width}×${height}<br>
+                    <strong>Error:</strong> ${error}<br>
+                    <strong>Status:</strong> ❌ Decoding failed
+                `;
+            } else {
+                resultInfo.className = 'result-info success';
+                resultInfo.innerHTML = `
+                    <strong>Source:</strong> ${source}<br>
+                    <strong>Size:</strong> ${width}×${height}<br>
+                    <strong>Decoded String:</strong> ${decodedString}<br>
+                    <strong>Status:</strong> ✅ Successfully decoded
+                    <button class="copy-btn" onclick="copyToClipboard('${decodedString}')">Copy</button>
+                `;
+            }
+        }
+        
+        // Show status
+        function showStatus(message, type = 'info') {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = `status ${type}`;
+            status.style.display = 'block';
+        }
+        
+        // Copy to clipboard
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                showStatus('Copied to clipboard!', 'success');
+            }).catch(() => {
+                showStatus('Failed to copy to clipboard', 'error');
+            });
+        }
+        
+        // Start auto-scanning for circular patterns
+        function startAutoScan() {
+            if (scanInterval) clearInterval(scanInterval);
+            
+            scanInterval = setInterval(() => {
+                if (stream && !isScanning) {
+                    detectAndCapture();
+                }
+            }, 300); // Check every 300ms for better responsiveness
+        }
+        
+        // Detect circular pattern and auto-capture
+        function detectAndCapture() {
+            if (!stream || isScanning) return;
+            
+            const video = document.getElementById('video');
+            const canvas = document.getElementById('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            canvas.width = 400;
+            canvas.height = 400;
+            
+            // Draw current video frame to canvas
+            ctx.drawImage(video, 0, 0, 400, 400);
+            
+            // Get image data for pattern detection
+            const imageData = ctx.getImageData(0, 0, 400, 400);
+            
+            // Check if we have a valid dot code pattern
+            if (hasValidDotCodePattern(imageData)) {
+                const now = Date.now();
+                if (now - lastCaptureTime > 2000) { // Prevent rapid captures
+                    lastCaptureTime = now;
+                    isScanning = true;
+                    
+                    // Visual feedback
+                    document.getElementById('scanCircle').classList.add('detecting');
+                    document.getElementById('scanStatus').textContent = '🎯 Pattern detected! Decoding...';
+                    
+                    showStatus('🎯 Valid dot code pattern detected! Attempting to decode...', 'info');
+                    
+                    // Try to decode
+                    setTimeout(() => {
+                        try {
+                            const decodedString = decodeSpiralAvatarFromImage(canvas, 200);
+                            if (decodedString && decodedString.length > 10 && isValidNpub(decodedString)) {
+                                showResult(decodedString, 'Auto-Capture', 400, 400);
+                                showStatus('✅ Dot code decoded successfully!', 'success');
+                                stopCamera(); // Stop after successful decode
+                            } else {
+                                showStatus('🔄 Pattern detected but not a valid npub. Keep trying...', 'info');
+                                document.getElementById('scanCircle').classList.remove('detecting');
+                                document.getElementById('scanStatus').textContent = 'Point camera at dot code';
+                                isScanning = false;
+                            }
+                        } catch (error) {
+                            showStatus('🔄 Pattern detected but decode failed. Keep trying...', 'info');
+                            document.getElementById('scanCircle').classList.remove('detecting');
+                            document.getElementById('scanStatus').textContent = 'Point camera at dot code';
+                            isScanning = false;
+                        }
+                    }, 100);
+                }
+            } else {
+                // Reset visual feedback when no pattern detected
+                document.getElementById('scanCircle').classList.remove('detecting');
+                document.getElementById('scanStatus').textContent = 'Point camera at dot code';
+            }
+        }
+        
+        // Check if string looks like a valid npub
+        function isValidNpub(str) {
+            // Basic validation: should start with npub1 and be reasonable length
+            return str && str.length > 50 && str.length < 70 && str.startsWith('npub1');
+        }
+        
+        // Improved dot code pattern detection
+        function hasValidDotCodePattern(imageData) {
+            const data = imageData.data;
+            const width = imageData.width;
+            const height = imageData.height;
+            const centerX = width / 2;
+            const centerY = height / 2;
+            
+            // First, check if we have a clear circular boundary
+            const radius = Math.min(width, height) * 0.4;
+            let boundaryDots = 0;
+            let boundarySamples = 0;
+            
+            // Sample the boundary of the circle
+            for (let angle = 0; angle < 360; angle += 5) {
+                const rad = angle * Math.PI / 180;
+                const x = centerX + radius * Math.cos(rad);
+                const y = centerY + radius * Math.sin(rad);
+                
+                if (x >= 0 && x < width && y >= 0 && y < height) {
+                    const index = (Math.floor(y) * width + Math.floor(x)) * 4;
+                    const r = data[index];
+                    const g = data[index + 1];
+                    const b = data[index + 2];
+                    const brightness = (r + g + b) / 3;
+                    
+                    // Count dots on the boundary
+                    if (brightness < 128) {
+                        boundaryDots++;
+                    }
+                    boundarySamples++;
+                }
+            }
+            
+            // Boundary should have some dots but not too many (indicating a clear circle)
+            const boundaryRatio = boundarySamples > 0 ? boundaryDots / boundarySamples : 0;
+            if (boundaryRatio < 0.05 || boundaryRatio > 0.4) {
+                return false; // Not a clear circular boundary
+            }
+            
+            // Now check the interior for a reasonable dot pattern
+            let interiorDots = 0;
+            let interiorSamples = 0;
+            
+            // Sample interior points in a grid pattern
+            for (let x = centerX - radius * 0.6; x < centerX + radius * 0.6; x += 10) {
+                for (let y = centerY - radius * 0.6; y < centerY + radius * 0.6; y += 10) {
+                    const distance = Math.sqrt((x - centerX) ** 2 + (y - centerY) ** 2);
+                    if (distance < radius * 0.6) { // Inside the circle
+                        if (x >= 0 && x < width && y >= 0 && y < height) {
+                            const index = (Math.floor(y) * width + Math.floor(x)) * 4;
+                            const r = data[index];
+                            const g = data[index + 1];
+                            const b = data[index + 2];
+                            const brightness = (r + g + b) / 3;
+                            
+                            if (brightness < 128) {
+                                interiorDots++;
+                            }
+                            interiorSamples++;
+                        }
+                    }
+                }
+            }
+            
+            // Interior should have a reasonable number of dots (like our avatar patterns)
+            const interiorRatio = interiorSamples > 0 ? interiorDots / interiorSamples : 0;
+            
+            // Valid dot code should have between 20% and 60% dots in the interior
+            return interiorRatio >= 0.2 && interiorRatio <= 0.6;
+        }
+        
+        // Initialize when page loads
+        window.onload = initScanner;
+    </script>
+</body>
+</html> 
+</html> 

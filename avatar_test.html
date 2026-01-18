@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Avatar Generator Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #1a1a1a;
+            color: #e0e0e0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+        .container {
+            background-color: #2a2a2a;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            width: 100%;
+            max-width: 600px;
+            text-align: center;
+        }
+        h1 {
+            color: #f0f0f0;
+            margin-bottom: 20px;
+        }
+        .input-group {
+            margin-bottom: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        label {
+            margin-bottom: 8px;
+            font-size: 1.1em;
+        }
+        input[type="text"] {
+            width: 80%;
+            padding: 10px;
+            border: 1px solid #444;
+            border-radius: 8px;
+            background-color: #333;
+            color: #e0e0e0;
+            font-size: 1em;
+            box-sizing: border-box;
+            margin-bottom: 10px;
+        }
+        .avatar-display {
+            margin-top: 30px;
+            border: 2px solid #444;
+            border-radius: 12px;
+            padding: 20px;
+            background-color: #1f1f1f;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .avatar-display h2 {
+            color: #f0f0f0;
+            margin-bottom: 15px;
+        }
+        .generated-avatar {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            overflow: hidden;
+            background-color: #2a2a2a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+        }
+        .generated-avatar svg {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+        }
+        .note {
+            margin-top: 20px;
+            font-size: 0.9em;
+            color: #888;
+        }
+        .contrast-info {
+            margin-top: 15px;
+            padding: 10px;
+            background-color: #333;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 0.9em;
+        }
+        .contrast-good {
+            color: #4ade80;
+        }
+        .contrast-bad {
+            color: #f87171;
+        }
+        .download-btn {
+            margin-top: 15px;
+            padding: 10px 20px;
+            background-color: #4ade80;
+            color: #1a1a1a;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .download-btn:hover {
+            background-color: #22c55e;
+        }
+        .download-btn:disabled {
+            background-color: #666;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Avatar Generator Test</h1>
+        <div class="input-group">
+            <label for="pubkeyInput">Enter Public Key or any string:</label>
+            <input type="text" id="pubkeyInput" placeholder="e.g., npub1ljak...fkn..." value="npub1ljak...fkn..." oninput="debouncedGenerateAvatar()">
+        </div>
+        <div class="avatar-display">
+            <h2>Generated Avatar:</h2>
+            <div id="avatarContainer" class="generated-avatar">
+                <!-- Avatar will be displayed here -->
+            </div>
+            <button id="downloadBtn" class="download-btn" onclick="downloadAvatarPNG()" style="display: none;">
+                📥 Download 400x400 PNG
+            </button>
+            <div id="contrastInfo" class="contrast-info">
+                <!-- Contrast ratio info will be displayed here -->
+            </div>
+            <p class="note">Type to see avatars update instantly!</p>
+        </div>
+    </div>
+
+    <!-- Load necessary scripts -->
+    <script src="js/utils.js"></script>
+    <script src="js/avatar.js"></script>
+
+    <script>
+        let debounceTimer;
+        
+        function debouncedGenerateAvatar() {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(generateAndDisplayAvatar, 100); // 100ms delay
+        }
+        
+        function generateAndDisplayAvatar() {
+            const pubkey = document.getElementById('pubkeyInput').value;
+            const avatarContainer = document.getElementById('avatarContainer');
+            const contrastInfo = document.getElementById('contrastInfo');
+            const downloadBtn = document.getElementById('downloadBtn');
+            
+            if (pubkey) {
+                // Special mode: fill entire circle and count dots
+                if (pubkey === '`') {
+                    const avatarSVG = generateMaxDotsAvatar(100);
+                    avatarContainer.innerHTML = avatarSVG;
+                    downloadBtn.style.display = 'inline-block';
+                    // The detailed info will be set by generateMaxDotsAvatar function
+                } else if (pubkey === 'capacity') {
+                    // Show encoding capacity
+                    const capacity = getMaxDataCapacity(100);
+                    const {count, positions} = calculateValidDotPositions(100);
+                    
+                    avatarContainer.innerHTML = '<div style="text-align: center; padding: 20px;"><span class="material-symbols-rounded" style="font-size: 48px;">data_object</span></div>';
+                    downloadBtn.style.display = 'none';
+                    contrastInfo.innerHTML = `
+                        <div class="contrast-good">
+                            <strong>Encoding Capacity Analysis:</strong><br>
+                            <strong>Valid Dot Positions:</strong> ${count}<br>
+                            <strong>Total Bits Available:</strong> ${capacity.totalBits}<br>
+                            <strong>Maximum Bytes:</strong> ${capacity.maxBytes}<br>
+                            <strong>Maximum Characters:</strong> ${capacity.maxChars}<br>
+                            <strong>Example Capacity:</strong> ${capacity.exampleCapacity}<br>
+                            <strong>Pattern Space:</strong> 2^${count} combinations<br>
+                            <strong>Npub Length:</strong> ~63 characters (${capacity.maxChars >= 63 ? '✅ FITS' : '❌ TOO SHORT'})
+                        </div>
+                    `;
+                } else if (pubkey === 'npub') {
+                    // Show example npub
+                    const exampleNpub = "npub1ljakxcl65g0g6l3q5mqp8mrs3umtlgqeyu0h69yuk5n9ya8kvz6q6knfkn";
+                    const capacity = getMaxDataCapacity(100);
+                    
+                    avatarContainer.innerHTML = '<div style="text-align: center; padding: 20px;"><span class="material-symbols-rounded" style="font-size: 48px;">key</span></div>';
+                    downloadBtn.style.display = 'none';
+                    contrastInfo.innerHTML = `
+                        <div class="contrast-good">
+                            <strong>Npub Example:</strong><br>
+                            <code style="word-break: break-all;">${exampleNpub}</code><br>
+                            <strong>Length:</strong> ${exampleNpub.length} characters<br>
+                            <strong>Bits Needed:</strong> ${exampleNpub.length * 8} bits<br>
+                            <strong>Our Capacity:</strong> ${capacity.totalBits} bits<br>
+                            <strong>Status:</strong> ${capacity.totalBits >= exampleNpub.length * 8 ? '✅ CAN ENCODE' : '❌ TOO SHORT'}
+                        </div>
+                    `;
+                } else if (pubkey === 'qr') {
+                    // Test QR encoding
+                    const testString = "Hello World!";
+                    const encodedSVG = encodeStringToAvatar(testString, 100);
+                    avatarContainer.innerHTML = encodedSVG;
+                    downloadBtn.style.display = 'inline-block';
+                    
+                    const binaryData = stringToBinary(testString);
+                    const {count, positions} = calculateValidDotPositions(100);
+                    
+                    contrastInfo.innerHTML = `
+                        <div class="contrast-good">
+                            <strong>QR Encoding Test:</strong><br>
+                            <strong>Test String:</strong> "${testString}"<br>
+                            <strong>Length:</strong> ${testString.length} characters<br>
+                            <strong>Binary Length:</strong> ${binaryData.length} bits<br>
+                            <strong>Available Positions:</strong> ${count}<br>
+                            <strong>Density:</strong> ${((binaryData.length / count) * 100).toFixed(1)}% filled<br>
+                            <strong>Status:</strong> ${binaryData.length <= count ? '✅ FITS' : '❌ TOO LONG'}<br>
+                            <strong>Features:</strong> Black dots on white, orientation markers, scattered distribution
+                        </div>
+                    `;
+                } else if (pubkey === 'decode') {
+                    // Test decoding functionality
+                    const testString = "Test Decode!";
+                    const encodedSVG = encodeStringToAvatar(testString, 100);
+                    avatarContainer.innerHTML = encodedSVG;
+                    downloadBtn.style.display = 'inline-block';
+                    
+                    // Test round-trip
+                    setTimeout(() => {
+                        try {
+                            const img = new Image();
+                            img.onload = function() {
+                                const decodedString = decodeAvatarFromImage(img, 100);
+                                contrastInfo.innerHTML = `
+                                    <div class="contrast-good">
+                                        <strong>Decode Test:</strong><br>
+                                        <strong>Original:</strong> "${testString}"<br>
+                                        <strong>Decoded:</strong> "${decodedString}"<br>
+                                        <strong>Match:</strong> ${testString === decodedString ? '✅ SUCCESS' : '❌ FAILED'}<br>
+                                        <strong>Status:</strong> Round-trip test completed
+                                    </div>
+                                `;
+                            };
+                            
+                            // Convert SVG to data URL for testing
+                            const svgBlob = new Blob([encodedSVG], {type: 'image/svg+xml'});
+                            img.src = URL.createObjectURL(svgBlob);
+                        } catch (error) {
+                            contrastInfo.innerHTML = `
+                                <div class="contrast-bad">
+                                    <strong>Decode Test:</strong><br>
+                                    <strong>Error:</strong> ${error.message}<br>
+                                    <strong>Status:</strong> ❌ Decoding failed
+                                </div>
+                            `;
+                        }
+                    }, 100);
+                    
+                    contrastInfo.innerHTML = `
+                        <div class="contrast-good">
+                            <strong>Decode Test:</strong><br>
+                            <strong>Testing round-trip encoding/decoding...</strong><br>
+                            <strong>Original:</strong> "${testString}"<br>
+                            <strong>Status:</strong> Processing...
+                        </div>
+                    `;
+                } else if (pubkey === 'simple') {
+                    // Test simple encoding (no shuffling)
+                    const testString = "Hello Simple!";
+                    const encodedSVG = encodeStringToAvatarSimple(testString, 100);
+                    avatarContainer.innerHTML = encodedSVG;
+                    downloadBtn.style.display = 'inline-block';
+                    
+                    // Test round-trip with simple encoding
+                    setTimeout(() => {
+                        try {
+                            const img = new Image();
+                            img.onload = function() {
+                                const decodedString = decodeAvatarFromImage(img, 100);
+                                contrastInfo.innerHTML = `
+                                    <div class="contrast-good">
+                                        <strong>Simple Encode Test:</strong><br>
+                                        <strong>Original:</strong> "${testString}"<br>
+                                        <strong>Decoded:</strong> "${decodedString}"<br>
+                                        <strong>Match:</strong> ${testString === decodedString ? '✅ SUCCESS' : '❌ FAILED'}<br>
+                                        <strong>Status:</strong> Simple encoding (no shuffling)
+                                    </div>
+                                `;
+                            };
+                            
+                            // Convert SVG to data URL for testing
+                            const svgBlob = new Blob([encodedSVG], {type: 'image/svg+xml'});
+                            img.src = URL.createObjectURL(svgBlob);
+                        } catch (error) {
+                            contrastInfo.innerHTML = `
+                                <div class="contrast-bad">
+                                    <strong>Simple Encode Test:</strong><br>
+                                    <strong>Error:</strong> ${error.message}<br>
+                                    <strong>Status:</strong> ❌ Decoding failed
+                                </div>
+                            `;
+                        }
+                    }, 100);
+                    
+                    contrastInfo.innerHTML = `
+                        <div class="contrast-good">
+                            <strong>Simple Encode Test:</strong><br>
+                            <strong>Testing simple encoding (no shuffling)...</strong><br>
+                            <strong>Original:</strong> "${testString}"<br>
+                            <strong>Status:</strong> Processing...
+                        </div>
+                    `;
+                } else {
+                    const avatarSVG = generateAvatar(pubkey, 100);
+                    avatarContainer.innerHTML = avatarSVG;
+                    downloadBtn.style.display = 'inline-block';
+                    
+                    // Calculate and display contrast ratio
+                    displayContrastInfo(pubkey);
+                }
+            } else {
+                avatarContainer.innerHTML = '<p style="color: #888;">Please enter a string.</p>';
+                downloadBtn.style.display = 'none';
+                contrastInfo.innerHTML = '';
+            }
+        }
+        
+        function generateMaxDotsAvatar(size) {
+            const center = size / 2;
+            const radius = size * 0.45;
+            const dotSize = radius / 32; // Smaller dots for higher density
+            const gridSize = 32; // 32x32 grid (1024 possible positions)
+            const gridSpacing = radius / (gridSize * 0.5);
+            
+            let svg = `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg">`;
+            
+            // Square background
+            svg += `<rect x="0" y="0" width="${size}" height="${size}" fill="hsl(200, 50%, 30%)"/>`;
+            
+            let dotCount = 0;
+            let voidCount = 0;
+            let rowCounts = new Array(gridSize).fill(0);
+            let maxRowCount = 0;
+            let maxColCount = 0;
+            let colCounts = new Array(gridSize).fill(0);
+            
+            for (let x = 0; x < gridSize; x++) {
+                for (let y = 0; y < gridSize; y++) {
+                    const gridX = (x - gridSize/2 + 0.5) * gridSpacing;
+                    const gridY = (y - gridSize/2 + 0.5) * gridSpacing;
+                    
+                    const distanceFromCenter = Math.sqrt(gridX * gridX + gridY * gridY);
+                    if (distanceFromCenter + dotSize <= radius * 1) {
+                        const finalX = center + gridX;
+                        const finalY = center + gridY;
+                        svg += `<circle cx="${finalX}" cy="${finalY}" r="${dotSize}" fill="hsl(60, 100%, 80%)"/>`;
+                        dotCount++;
+                        rowCounts[y]++;
+                        colCounts[x]++;
+                    } else {
+                        voidCount++;
+                    }
+                }
+            }
+            
+            // Find max counts
+            maxRowCount = Math.max(...rowCounts);
+            maxColCount = Math.max(...colCounts);
+            
+            svg += '</svg>';
+            
+            // Add dot count info
+            const totalCombinations = Math.pow(2, dotCount);
+            const readableCombinations = formatLargeNumber(totalCombinations);
+            const totalGridPositions = gridSize * gridSize;
+            const voidPercentage = ((voidCount / totalGridPositions) * 100).toFixed(1);
+            const safePercentage = ((dotCount / totalGridPositions) * 100).toFixed(1);
+            
+            document.getElementById('contrastInfo').innerHTML = `
+                <div class="contrast-good">
+                    <strong>DETAILED MATH VERIFICATION:</strong><br>
+                    <strong>Total Dots (SAFE):</strong> ${dotCount}<br>
+                    <strong>Void Dots (corners/edges):</strong> ${voidCount}<br>
+                    <strong>Grid Total:</strong> ${totalGridPositions} positions<br>
+                    <strong>Safe Coverage:</strong> ${safePercentage}% of grid<br>
+                    <strong>Void Coverage:</strong> ${voidPercentage}% of grid<br>
+                    <strong>Grid Dimensions:</strong> ${gridSize}×${gridSize} = ${totalGridPositions} total positions<br>
+                    <strong>Largest Row:</strong> ${maxRowCount} dots (row ${rowCounts.indexOf(maxRowCount) + 1})<br>
+                    <strong>Largest Column:</strong> ${maxColCount} dots (column ${colCounts.indexOf(maxColCount) + 1})<br>
+                    <strong>Dot Size:</strong> radius/${(radius/dotSize).toFixed(1)} = ${dotSize.toFixed(2)}px<br>
+                    <strong>Grid Spacing:</strong> ${gridSpacing.toFixed(2)}px<br>
+                    <strong>Circle Radius:</strong> ${radius.toFixed(2)}px (100% = ${(radius * 1).toFixed(2)}px)<br>
+                    <strong>Max Characters:</strong> ${Math.floor(dotCount / 8)} characters<br>
+                    <strong>Pattern Space:</strong> 2^${dotCount} = ${readableCombinations} combinations
+                </div>
+            `;
+            
+            return svg;
+        }
+        
+        function formatLargeNumber(num) {
+            if (num >= 1e9) {
+                return (num / 1e9).toFixed(1) + ' billion';
+            } else if (num >= 1e6) {
+                return (num / 1e6).toFixed(1) + ' million';
+            } else if (num >= 1e3) {
+                return (num / 1e3).toFixed(1) + ' thousand';
+            }
+            return num.toString();
+        }
+        
+        function displayContrastInfo(pubkey) {
+            const contrastInfo = document.getElementById('contrastInfo');
+            
+            // Generate the same avatar config to get colors
+            const rng = createSeededRNG(hashString(pubkey));
+            const config = generateAvatarConfig(rng);
+            
+            // Get background color
+            const bgRGB = hslToRgb(config.backgroundHue, config.backgroundSaturation, config.backgroundLightness);
+            const bgLuminance = calculateLuminance(bgRGB);
+            
+            // Get dot color
+            const dotColor = calculateOptimalDotColor(config.backgroundHue, config.backgroundSaturation, config.backgroundLightness, config.patternSeed);
+            const dotHSL = parseHSL(dotColor);
+            const dotRGB = hslToRgb(dotHSL.h, dotHSL.s, dotHSL.l);
+            const dotLuminance = calculateLuminance(dotRGB);
+            
+            // Calculate contrast ratio
+            const contrastRatio = calculateContrastRatio(bgLuminance, dotLuminance);
+            
+            // Determine WCAG compliance
+            const meetsAA = contrastRatio >= 3.0;
+            const meetsAAA = contrastRatio >= 4.5;
+            
+            const statusClass = meetsAA ? 'contrast-good' : 'contrast-bad';
+            const statusText = meetsAA ? '✅ PASSES WCAG AA' : '❌ FAILS WCAG AA';
+            
+            contrastInfo.innerHTML = `
+                <div><strong>Contrast Ratio:</strong> <span class="${statusClass}">${contrastRatio.toFixed(2)}:1</span></div>
+                <div><strong>WCAG AA (3.0:1):</strong> <span class="${statusClass}">${statusText}</span></div>
+                <div><strong>WCAG AAA (4.5:1):</strong> <span class="${meetsAAA ? 'contrast-good' : 'contrast-bad'}">${meetsAAA ? '✅ PASSES' : '❌ FAILS'}</span></div>
+                <div><strong>Background:</strong> hsl(${config.backgroundHue.toFixed(1)}, ${config.backgroundSaturation.toFixed(1)}%, ${config.backgroundLightness.toFixed(1)}%)</div>
+                <div><strong>Dots:</strong> ${dotColor}</div>
+            `;
+        }
+        
+        function parseHSL(hslString) {
+            const match = hslString.match(/hsl\(([^,]+),\s*([^,]+)%,\s*([^)]+)%\)/);
+            if (match) {
+                return {
+                    h: parseFloat(match[1]),
+                    s: parseFloat(match[2]),
+                    l: parseFloat(match[3])
+                };
+            }
+            return { h: 0, s: 0, l: 0 };
+        }
+
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            generateAndDisplayAvatar();
+        });
+        
+        // Download avatar as PNG
+        function downloadAvatarPNG() {
+            const avatarContainer = document.getElementById('avatarContainer');
+            const svgElement = avatarContainer.querySelector('svg');
+            
+            if (!svgElement) {
+                alert('No avatar found to download');
+                return;
+            }
+            
+            try {
+                // Convert SVG to PNG
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                const img = new Image();
+                
+                img.onload = function() {
+                    canvas.width = 400;
+                    canvas.height = 400;
+                    
+                    // Draw the image to canvas
+                    ctx.drawImage(img, 0, 0, 400, 400);
+                    
+                    // Create download link
+                    const link = document.createElement('a');
+                    link.download = 'avatar.png';
+                    link.href = canvas.toDataURL('image/png');
+                    link.click();
+                };
+                
+                // Convert SVG to data URL
+                const svgString = new XMLSerializer().serializeToString(svgElement);
+                const svgBlob = new Blob([svgString], {type: 'image/svg+xml'});
+                img.src = URL.createObjectURL(svgBlob);
+                
+            } catch (error) {
+                console.error('Error downloading avatar:', error);
+                alert('Failed to download avatar: ' + error.message);
+            }
+        }
+    </script>
+</body>
+</html> 

@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Avatar QR Code Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #1a1a1a;
+            color: #e0e0e0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+        .container {
+            background-color: #2a2a2a;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            width: 100%;
+            max-width: 800px;
+            text-align: center;
+        }
+        h1 {
+            color: #f0f0f0;
+            margin-bottom: 20px;
+        }
+        .section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background-color: #1f1f1f;
+            border-radius: 8px;
+        }
+        .input-group {
+            margin-bottom: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        label {
+            margin-bottom: 8px;
+            font-size: 1.1em;
+        }
+        input[type="text"] {
+            width: 80%;
+            padding: 10px;
+            border: 1px solid #444;
+            border-radius: 8px;
+            background-color: #333;
+            color: #e0e0e0;
+            font-size: 1em;
+            box-sizing: border-box;
+            margin-bottom: 10px;
+        }
+        button {
+            background-color: #3b82f6;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background-color 0.2s ease;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #2563eb;
+        }
+        .avatar-display {
+            border: 2px solid #444;
+            border-radius: 12px;
+            padding: 20px;
+            background-color: #1f1f1f;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .generated-avatar {
+            width: 200px;
+            height: 200px;
+            border-radius: 50%;
+            overflow: hidden;
+            background-color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+            margin: 20px 0;
+        }
+        .generated-avatar svg {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+        }
+        .info-box {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #333;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 0.9em;
+            text-align: left;
+        }
+        .camera-section {
+            margin-top: 30px;
+        }
+        #video {
+            width: 100%;
+            max-width: 400px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+        .note {
+            margin-top: 20px;
+            font-size: 0.9em;
+            color: #888;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Avatar QR Code Test</h1>
+        
+        <!-- Encoding Section -->
+        <div class="section">
+            <h2>Encode String to Avatar</h2>
+            <div class="input-group">
+                <label for="encodeInput">Enter string to encode:</label>
+                <input type="text" id="encodeInput" placeholder="e.g., npub1ljakxcl65g0g6l3q5mqp8mrs3umtlgqeyu0h69yuk5n9ya8kvz6q6knfkn" value="Hello World!">
+                <button onclick="encodeString()">Encode to Avatar</button>
+                <button onclick="downloadPNG()">Download as PNG</button>
+            </div>
+            <div class="avatar-display">
+                <h3>Encoded Avatar:</h3>
+                <div id="encodedAvatarContainer" class="generated-avatar">
+                    <!-- Encoded avatar will be displayed here -->
+                </div>
+                <div id="encodeInfo" class="info-box">
+                    <!-- Encoding info will be displayed here -->
+                </div>
+            </div>
+        </div>
+        
+        <!-- Decoding Section -->
+        <div class="section">
+            <h2>Decode Avatar to String</h2>
+            <div class="input-group">
+                <button onclick="startCamera()">Start Camera</button>
+                <button onclick="uploadImage()">Upload Image</button>
+                <button onclick="captureAndDecode()">Capture & Decode</button>
+                <button onclick="stopCamera()">Stop Camera</button>
+                <button onclick="testRoundTrip()">Test Round-Trip</button>
+            </div>
+            <div class="camera-section">
+                <video id="video" autoplay></video>
+                <canvas id="canvas" style="display: none;"></canvas>
+            </div>
+            <div id="decodeInfo" class="info-box">
+                <!-- Decoding info will be displayed here -->
+            </div>
+        </div>
+        
+        <p class="note">This is a QR code-like system where avatars directly encode data and can be scanned/decoded.</p>
+    </div>
+
+    <!-- Load necessary scripts -->
+    <script src="js/utils.js"></script>
+    <script src="js/avatar.js"></script>
+
+    <script>
+        let stream = null;
+        
+        function encodeString() {
+            const input = document.getElementById('encodeInput').value;
+            if (!input) {
+                alert('Please enter a string to encode');
+                return;
+            }
+            
+            // Use spiral encoding with center orientation markers
+            const encodedSVG = encodeStringToAvatarSpiral(input, 200);
+            document.getElementById('encodedAvatarContainer').innerHTML = encodedSVG;
+            
+            // Show encoding info
+            const binaryData = stringToBinary(input);
+            const spiralPositions = generateSpiralOrderedGridPositions(200);
+            const capacity = spiralPositions.length - 3; // -3 for orientation markers
+            
+            document.getElementById('encodeInfo').innerHTML = `
+                <strong>Original String:</strong> ${input}<br>
+                <strong>Length:</strong> ${input.length} characters<br>
+                <strong>Binary Length:</strong> ${binaryData.length} bits<br>
+                <strong>Available Positions:</strong> ${spiralPositions.length} (${capacity} for data)<br>
+                <strong>Max Capacity:</strong> ${Math.floor(capacity / 8)} characters<br>
+                <strong>Density:</strong> ${((binaryData.length / capacity) * 100).toFixed(1)}% filled<br>
+                <strong>Status:</strong> ${binaryData.length <= capacity ? '✅ FITS' : '❌ TOO LONG'}<br>
+                <strong>Distribution:</strong> Spiral pattern from center outward<br>
+                <strong>Orientation:</strong> 3 center markers for auto-rotation
+            `;
+        }
+        
+        function downloadPNG() {
+            const svgElement = document.querySelector('#encodedAvatarContainer svg');
+            if (!svgElement) {
+                alert('Please encode a string first');
+                return;
+            }
+            
+            // Convert SVG to PNG and download
+            const svgData = new XMLSerializer().serializeToString(svgElement);
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            const img = new Image();
+            
+            img.onload = function() {
+                canvas.width = 400;
+                canvas.height = 400;
+                ctx.fillStyle = 'white';
+                ctx.fillRect(0, 0, 400, 400);
+                ctx.drawImage(img, 0, 0, 400, 400);
+                
+                const link = document.createElement('a');
+                link.download = 'avatar_qr.png';
+                link.href = canvas.toDataURL();
+                link.click();
+            };
+            
+            img.src = 'data:image/svg+xml;base64,' + btoa(svgData);
+        }
+        
+        async function startCamera() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+                document.getElementById('video').srcObject = stream;
+                document.getElementById('decodeInfo').innerHTML = 'Camera started. Point at an avatar to decode.';
+            } catch (err) {
+                document.getElementById('decodeInfo').innerHTML = 'Error starting camera: ' + err.message;
+            }
+        }
+        
+        function stopCamera() {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+                document.getElementById('video').srcObject = null;
+                document.getElementById('decodeInfo').innerHTML = 'Camera stopped.';
+            }
+        }
+        
+        function uploadImage() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/*';
+            input.onchange = function(e) {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        const img = new Image();
+                        img.onload = function() {
+                            try {
+                                // Decode the uploaded image using spiral decoding
+                                const decodedString = decodeAvatarFromSpiralImage(img, 200);
+                                
+                                document.getElementById('decodeInfo').innerHTML = `
+                                    <strong>Image uploaded:</strong> ${file.name}<br>
+                                    <strong>Size:</strong> ${img.width}×${img.height}<br>
+                                    <strong>Decoded String:</strong> ${decodedString}<br>
+                                    <strong>Status:</strong> ✅ Successfully decoded
+                                `;
+                            } catch (error) {
+                                document.getElementById('decodeInfo').innerHTML = `
+                                    <strong>Image uploaded:</strong> ${file.name}<br>
+                                    <strong>Size:</strong> ${img.width}×${img.height}<br>
+                                    <strong>Error:</strong> ${error.message}<br>
+                                    <strong>Status:</strong> ❌ Decoding failed
+                                `;
+                            }
+                        };
+                        img.src = e.target.result;
+                    };
+                    reader.readAsDataURL(file);
+                }
+            };
+            input.click();
+        }
+        
+        // Add camera capture functionality
+        function captureAndDecode() {
+            const video = document.getElementById('video');
+            const canvas = document.getElementById('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            canvas.width = 200;
+            canvas.height = 200;
+            
+            // Draw current video frame to canvas
+            ctx.drawImage(video, 0, 0, 200, 200);
+            
+            try {
+                // Create a temporary image from canvas for decoding
+                const tempImg = new Image();
+                tempImg.onload = function() {
+                    try {
+                        // Decode the pattern using spiral decoding
+                        const decodedString = decodeAvatarFromSpiralImage(tempImg, 200);
+                        
+                        document.getElementById('decodeInfo').innerHTML = `
+                            <strong>Camera Capture:</strong> Live decoding<br>
+                            <strong>Decoded String:</strong> ${decodedString}<br>
+                            <strong>Status:</strong> ✅ Successfully decoded
+                        `;
+                    } catch (error) {
+                        document.getElementById('decodeInfo').innerHTML = `
+                            <strong>Camera Capture:</strong> Live decoding<br>
+                            <strong>Error:</strong> ${error.message}<br>
+                            <strong>Status:</strong> ❌ Decoding failed
+                        `;
+                    }
+                };
+                
+                // Convert canvas to data URL
+                tempImg.src = canvas.toDataURL();
+            } catch (error) {
+                document.getElementById('decodeInfo').innerHTML = `
+                    <strong>Camera Capture:</strong> Live decoding<br>
+                    <strong>Error:</strong> ${error.message}<br>
+                    <strong>Status:</strong> ❌ Decoding failed
+                `;
+            }
+        }
+        
+        // Add test round-trip functionality
+        function testRoundTrip() {
+            const input = document.getElementById('encodeInput').value;
+            if (!input) {
+                alert('Please enter a string to test');
+                return;
+            }
+            
+            try {
+                // Use spiral encoding for round-trip test
+                const encodedSVG = encodeStringToAvatarSpiral(input, 200);
+                
+                // Create a temporary image element for decoding
+                const img = new Image();
+                img.onload = function() {
+                    try {
+                        const decodedString = decodeAvatarFromSpiralImage(img, 200);
+                        document.getElementById('decodeInfo').innerHTML = `
+                            <strong>Round-Trip Test:</strong><br>
+                            <strong>Original:</strong> ${input}<br>
+                            <strong>Decoded:</strong> ${decodedString}<br>
+                            <strong>Match:</strong> ${input === decodedString ? '✅ SUCCESS' : '❌ FAILED'}<br>
+                            <strong>Status:</strong> Spiral encoding test completed
+                        `;
+                    } catch (error) {
+                        document.getElementById('decodeInfo').innerHTML = `
+                            <strong>Round-Trip Test:</strong><br>
+                            <strong>Error:</strong> ${error.message}<br>
+                            <strong>Status:</strong> ❌ Decoding failed
+                        `;
+                    }
+                };
+                
+                // Convert SVG to data URL
+                const svgBlob = new Blob([encodedSVG], {type: 'image/svg+xml'});
+                img.src = URL.createObjectURL(svgBlob);
+                
+            } catch (error) {
+                document.getElementById('decodeInfo').innerHTML = `
+                    <strong>Round-Trip Test:</strong><br>
+                    <strong>Error:</strong> ${error.message}<br>
+                    <strong>Status:</strong> ❌ Test failed
+                `;
+            }
+        }
+        
+        // Auto-encode on page load
+        window.onload = function() {
+            encodeString();
+        };
+    </script>
+</body>
+</html> 
