@@ -108,6 +108,14 @@ function loadProfileState() {
                 error: null
             };
             profileState.pendingPublish = !!parsed.pendingPublish;
+            if (profileState.nip05.identifier) {
+                if (!profileState.metadata) {
+                    profileState.metadata = {};
+                }
+                if (!profileState.metadata.nip05) {
+                    profileState.metadata.nip05 = profileState.nip05.identifier;
+                }
+            }
         }
     } catch (error) {
         console.error('Error loading profile state:', error);

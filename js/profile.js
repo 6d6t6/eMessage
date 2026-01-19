@@ -292,6 +292,16 @@ function updateNip05Status(prefix = 'profile') {
     }
 }
 
+function syncNip05Metadata(identifier) {
+    if (!identifier) return;
+    if (!profileState.metadata) {
+        profileState.metadata = {};
+    }
+    if (profileState.metadata.nip05 !== identifier) {
+        profileState.metadata.nip05 = identifier;
+    }
+}
+
 function normalizeProfileMetadata(metadata) {
     const cleaned = {};
     PROFILE_FIELDS.forEach((field) => {
@@ -382,6 +392,7 @@ async function verifyAndStoreNip05(identifier) {
         syncProfileForms();
         return;
     }
+    syncNip05Metadata(parsed.normalized);
     
     try {
         const url = `https://${parsed.domain}/.well-known/nostr.json?name=${encodeURIComponent(parsed.name)}`;
