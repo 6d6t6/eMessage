@@ -161,6 +161,17 @@ function upsertProfileCache(pubkey, metadata, createdAt) {
         metadata,
         createdAt: createdAtValue
     });
+    if (userKeys && pubkey === userKeys.publicKey) {
+        const currentUpdatedAt = profileState.updatedAt || 0;
+        if (!profileState.metadata || createdAtValue >= currentUpdatedAt) {
+            profileState.metadata = metadata;
+            profileState.updatedAt = createdAtValue;
+            saveProfileState();
+            updateProfileAvatar();
+            updateStatus();
+            syncProfileForms();
+        }
+    }
     const fetchState = profileFetchState.get(pubkey);
     if (fetchState && fetchState.timer) {
         clearTimeout(fetchState.timer);
@@ -177,11 +188,14 @@ function upsertProfileCache(pubkey, metadata, createdAt) {
 }
 
 function requestProfileMetadata(pubkey, options = {}) {
-    if (!pubkey || !hasActiveRelayConnection()) return;
+    if (!pubkey) return;
+    const connected = hasActiveRelayConnection();
     const now = Date.now();
     const lastRequestedAt = profileRequestTimestamps.get(pubkey) || 0;
-    if (now - lastRequestedAt < PROFILE_REQUEST_COOLDOWN_MS) return;
-    profileRequestTimestamps.set(pubkey, now);
+    if (connected && now - lastRequestedAt < PROFILE_REQUEST_COOLDOWN_MS) return;
+    if (connected) {
+        profileRequestTimestamps.set(pubkey, now);
+    }
     pendingProfileRequests.add(pubkey);
     scheduleProfileRequestFlush(Boolean(options.immediate));
     scheduleProfileRetry(pubkey);
@@ -189,7 +203,11 @@ function requestProfileMetadata(pubkey, options = {}) {
 
 function subscribeToProfiles(socket, pubkeys) {
     if (!socket || socket.readyState !== WebSocket.OPEN) return;
-    const unique = Array.from(new Set(pubkeys.filter(Boolean)));
+    const combined = pubkeys.slice();
+    if (userKeys && userKeys.publicKey) {
+        combined.push(userKeys.publicKey);
+    }
+    const unique = Array.from(new Set(combined.filter(Boolean)));
     if (!unique.length) return;
     const now = Date.now();
     unique.forEach((pubkey) => {
@@ -239,6 +257,9 @@ function refreshProfilesForConversations() {
     chatState.conversations.forEach((conversation) => {
         requestProfileMetadata(conversation.recipient);
     });
+    if (userKeys && userKeys.publicKey) {
+        requestProfileMetadata(userKeys.publicKey);
+    }
 }
 
 function scheduleProfileRetry(pubkey) {
@@ -285,6 +306,7 @@ function normalizeProfileMetadata(metadata) {
 async function saveProfileMetadata(metadata, publish) {
     const cleaned = normalizeProfileMetadata(metadata || {});
     profileState.metadata = cleaned;
+    profileState.updatedAt = Math.floor(Date.now() / 1000);
     profileState.nip05 = {
         identifier: cleaned.nip05 || '',
         verified: false,
@@ -292,6 +314,9 @@ async function saveProfileMetadata(metadata, publish) {
         error: null
     };
     saveProfileState();
+    if (typeof scheduleIncognitoBackup === 'function') {
+        scheduleIncognitoBackup();
+    }
     updateProfileAvatar();
     updateStatus();
     syncProfileForms();

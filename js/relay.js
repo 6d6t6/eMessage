@@ -149,6 +149,18 @@ function connectRelay(relayUrl) {
         if (typeof refreshProfilesForConversations === 'function') {
             refreshProfilesForConversations();
         }
+        if (typeof scheduleProfileRequestFlush === 'function') {
+            scheduleProfileRequestFlush(true);
+        }
+        if (typeof requestProfileMetadataNow === 'function' && userKeys) {
+            requestProfileMetadataNow(userKeys.publicKey);
+        }
+        if (typeof subscribeToIncognitoBackup === 'function') {
+            subscribeToIncognitoBackup(relayState.socket);
+        }
+        if (typeof attemptPendingIncognitoBackup === 'function') {
+            attemptPendingIncognitoBackup();
+        }
         if (typeof attemptPendingProfilePublish === 'function') {
             attemptPendingProfilePublish();
         }
@@ -210,6 +222,13 @@ function handleRelayMessage(data, relayUrl = null) {
                     upsertProfileCache(event.pubkey, metadata, event.created_at);
                 } catch (error) {
                     console.warn('Failed to parse profile metadata:', error);
+                }
+                return;
+            }
+            
+            if (event.kind === 30078) {
+                if (typeof handleIncognitoBackupEvent === 'function') {
+                    handleIncognitoBackupEvent(event);
                 }
                 return;
             }
@@ -282,6 +301,18 @@ function handleRelayMessage(data, relayUrl = null) {
         } else if (message[0] === 'NOTICE') {
             console.log('=== RELAY NOTICE ===');
             console.log('Notice:', message[1]);
+        } else if (message[0] === 'EOSE') {
+            const subId = message[1];
+            relayConnections.forEach((state) => {
+                if (state.socket && state.socket.readyState === WebSocket.OPEN && state.incognitoSubId === subId) {
+                    if (typeof retryPendingMessages === 'function') {
+                        retryPendingMessages();
+                    }
+                    if (chatState && chatState.currentConversation) {
+                        displayConversationMessages(chatState.currentConversation);
+                    }
+                }
+            });
         } else {
             console.log('=== OTHER RELAY MESSAGE ===');
             console.log('Type:', message[0]);
@@ -300,6 +331,10 @@ function updateEventDeliveryStatus(eventId, relayUrl, accepted, reason) {
     }
     
     const status = messageSendingStatus.get(eventId);
+    if (status.retryTimer) {
+        clearTimeout(status.retryTimer);
+        status.retryTimer = null;
+    }
     status.relayAcks = status.relayAcks || {};
     
     if (relayUrl) {
@@ -360,6 +395,117 @@ function updateEventDeliveryStatus(eventId, relayUrl, accepted, reason) {
     messageSendingStatus.set(eventId, status);
 }
 
+function ensureRelayEnabled(relayUrl) {
+    const normalized = normalizeRelayUrl(relayUrl);
+    if (!normalized) return null;
+    
+    let relay = relaySettings.relays.find((item) => item.url === normalized);
+    if (!relay) {
+        relay = {
+            url: normalized,
+            enabled: true,
+            isDefault: false
+        };
+        relaySettings.relays.push(relay);
+    } else if (!relay.enabled) {
+        relay.enabled = true;
+    }
+    
+    saveRelaySettings();
+    renderRelayList();
+    connectRelay(normalized);
+    
+    return normalized;
+}
+
+function getIncognitoHistorySince() {
+    const fallbackSeconds = 30 * 24 * 60 * 60;
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    let since = nowSeconds - fallbackSeconds;
+    let earliestMs = null;
+
+    if (chatState && Array.isArray(chatState.conversations)) {
+        chatState.conversations.forEach((conversation) => {
+            const candidates = [conversation.lastReadTime, conversation.lastMessageTime]
+                .filter((value) => typeof value === 'number' && value > 0);
+            candidates.forEach((value) => {
+                if (earliestMs === null || value < earliestMs) {
+                    earliestMs = value;
+                }
+            });
+        });
+    }
+
+    if (earliestMs) {
+        since = Math.floor(earliestMs / 1000) - 300;
+    }
+    
+    if (incognitoState && incognitoState.conversations) {
+        incognitoState.conversations.forEach((data) => {
+            if (data && typeof data.createdAt === 'number') {
+                const createdMs = data.createdAt * 1000;
+                if (earliestMs === null || createdMs < earliestMs) {
+                    earliestMs = createdMs;
+                }
+            }
+        });
+        if (earliestMs) {
+            since = Math.floor(earliestMs / 1000) - 300;
+        }
+    }
+
+    return Math.max(0, since);
+}
+
+function buildIncognitoSubscriptionFilters(since) {
+    const filters = [];
+    const incomingAuthors = new Set();
+    const outgoingAuthors = new Set();
+    
+    if (incognitoState && incognitoState.conversations) {
+        incognitoState.conversations.forEach((data) => {
+            if (data.conversationPubkey) {
+                incomingAuthors.add(data.conversationPubkey);
+            }
+            if (data.recipientReplyIdentity && data.recipientReplyIdentity.publicKey) {
+                incomingAuthors.add(data.recipientReplyIdentity.publicKey);
+            }
+            if (data.conversationIdentity && data.conversationIdentity.publicKey) {
+                outgoingAuthors.add(data.conversationIdentity.publicKey);
+            }
+        });
+    }
+    
+    if (userKeys && userKeys.publicKey) {
+        filters.push({
+            kinds: [4],
+            '#p': [userKeys.publicKey],
+            since,
+            limit: 200
+        });
+    }
+    
+    if (incomingAuthors.size) {
+        filters.push({
+            kinds: [4],
+            authors: Array.from(incomingAuthors),
+            since,
+            limit: 200
+        });
+    }
+    
+    if (outgoingAuthors.size) {
+        filters.push({
+            kinds: [4],
+            authors: Array.from(outgoingAuthors),
+            since,
+            limit: 200
+        });
+    }
+    
+    return filters;
+}
+
 // Subscribe to incognito messages (listen for messages from other people's conversation identities)
 function subscribeToIncognitoMessages(socket) {
     if (!socket || socket.readyState !== WebSocket.OPEN) {
@@ -367,59 +513,35 @@ function subscribeToIncognitoMessages(socket) {
     }
     
     console.log('Subscribing to incognito messages...');
+    const since = getIncognitoHistorySince();
+    const filters = buildIncognitoSubscriptionFilters(since);
+    if (!filters.length) {
+        return;
+    }
     
-    // Subscribe to kind 4 messages but we'll filter them in handleIncognitoMessage
-    // We can't easily predict what disposable identities others will use to message us
     const subscriptionId = 'incognito_' + Date.now();
-    const filter = {
-        kinds: [4], // Regular DMs 
-        since: Math.floor(Date.now() / 1000) - 3600, // Last hour
-        limit: 50
-    };
+    if (relayConnections) {
+        relayConnections.forEach((state) => {
+            if (state.socket === socket && state.incognitoSubId) {
+                socket.send(JSON.stringify(['CLOSE', state.incognitoSubId]));
+                state.incognitoSubId = null;
+            }
+        });
+    }
     
     const subscribeMessage = JSON.stringify([
         'REQ',
         subscriptionId,
-        filter
+        ...filters
     ]);
     
     socket.send(subscribeMessage);
-    console.log('Subscribed to incognito messages (monitoring kind 4 events)');
-    
-    // Also subscribe specifically to messages tagged for us
-    const taggedSubscriptionId = 'tagged_' + Date.now();
-    const taggedFilter = {
-        kinds: [4],
-        '#p': [userKeys.publicKey], // Messages tagged for our pubkey
-        since: Math.floor(Date.now() / 1000) - 3600,
-        limit: 20
-    };
-    
-    const taggedSubscribeMessage = JSON.stringify([
-        'REQ',
-        taggedSubscriptionId,
-        taggedFilter
-    ]);
-    
-    socket.send(taggedSubscribeMessage);
-    console.log('Subscribed to messages tagged for our pubkey');
-    
-    // Also subscribe to invitations (kind 4 messages to our main pubkey)
-    const invitationSubscriptionId = 'invitations_' + Date.now();
-    const invitationFilter = {
-        kinds: [4],
-        '#p': [userKeys.publicKey],
-        limit: 10 // Get recent invitations
-    };
-
-    const invitationSubscribeMessage = JSON.stringify([
-        'REQ',
-        invitationSubscriptionId,
-        invitationFilter
-    ]);
-
-    socket.send(invitationSubscribeMessage);
-    console.log('Subscribed to incognito invitations');
+    relayConnections.forEach((state) => {
+        if (state.socket === socket) {
+            state.incognitoSubId = subscriptionId;
+        }
+    });
+    console.log('Subscribed to incognito messages with targeted filters');
 }
 
 // Send a message to the relay

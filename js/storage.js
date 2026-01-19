@@ -100,6 +100,7 @@ function loadProfileState() {
         if (stored) {
             const parsed = JSON.parse(stored);
             profileState.metadata = parsed.metadata || null;
+            profileState.updatedAt = parsed.updatedAt || null;
             profileState.nip05 = parsed.nip05 || {
                 identifier: '',
                 verified: false,
@@ -212,6 +213,9 @@ function saveIncognitoState() {
         }
         
         localStorage.setItem('incognitoState', JSON.stringify(data));
+        if (typeof scheduleIncognitoBackup === 'function') {
+            scheduleIncognitoBackup();
+        }
     } catch (error) {
         console.error('Error saving incognito state:', error);
     }
@@ -322,6 +326,7 @@ function clearStorage() {
     chatState.showSettings = false;
 
     profileState.metadata = null;
+    profileState.updatedAt = null;
     profileState.nip05 = {
         identifier: '',
         verified: false,

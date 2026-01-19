@@ -1015,6 +1015,7 @@ body {
     justify-content: center;
     position: relative;
     z-index: 2;
+    overflow: hidden;
 }
 
 .profile-panel-banner-avatar {

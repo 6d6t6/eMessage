@@ -134,6 +134,51 @@ async function startNewConversation() {
     updateConversationsDisplay();
 }
 
+function ensureConversationEntry(recipientPubkey, options = {}) {
+    if (!recipientPubkey) return null;
+    const existing = chatState.conversations.find(c => c.id === recipientPubkey);
+    if (existing) {
+        return existing;
+    }
+    
+    const createdAtMs = typeof options.createdAt === 'number' ? options.createdAt * 1000 : 0;
+    const conversation = {
+        id: recipientPubkey,
+        recipient: recipientPubkey,
+        name: getDisplayNameForPubkey(recipientPubkey),
+        lastMessage: '',
+        lastMessageTime: createdAtMs,
+        unreadCount: 0,
+        lastReadTime: 0
+    };
+    
+    chatState.conversations.unshift(conversation);
+    if (!chatState.messages.has(recipientPubkey)) {
+        chatState.messages.set(recipientPubkey, []);
+    }
+    
+    return conversation;
+}
+
+function syncConversationsFromIncognito() {
+    if (!incognitoState || !incognitoState.conversations) return;
+    let updated = false;
+    for (const [recipient, data] of incognitoState.conversations) {
+        const exists = chatState.conversations.find(c => c.id === recipient);
+        if (!exists) {
+            ensureConversationEntry(recipient, { createdAt: data.createdAt });
+            updated = true;
+        }
+        if (typeof requestProfileMetadata === 'function') {
+            requestProfileMetadata(recipient);
+        }
+    }
+    if (updated) {
+        saveChatState();
+        updateConversationsDisplay();
+    }
+}
+
 // Select conversation
 function selectConversation(conversationId) {
     console.log('Selecting conversation:', conversationId);
@@ -561,7 +606,17 @@ function updateConversationsDisplay() {
 function processIncomingMessageForConversation(event, decryptedContent) {
     console.log('Processing incoming message for conversation:', event.pubkey);
     try {
-        const originalMessage = JSON.parse(decryptedContent);
+        const parsedPayload = JSON.parse(decryptedContent);
+        const originalMessage = parsedPayload && parsedPayload.event ? parsedPayload.event : parsedPayload;
+        if (parsedPayload && parsedPayload.profile) {
+            const profilePubkey = originalMessage && originalMessage.pubkey ? originalMessage.pubkey : null;
+            if (profilePubkey) {
+                upsertProfileCache(profilePubkey, parsedPayload.profile, event.created_at);
+            }
+        }
+        if (!originalMessage || !originalMessage.id || typeof originalMessage.content !== 'string') {
+            return;
+        }
         
         // Check if we've already processed this message in this function
         const messageKey = `${event.id}_${originalMessage.id}`;
@@ -579,6 +634,12 @@ function processIncomingMessageForConversation(event, decryptedContent) {
         for (const [recipient, data] of incognitoState.conversations) {
             // Check if this is a message from their conversation identity (initial messages)
             if (data.conversationPubkey === event.pubkey) {
+                conversationId = recipient;
+                senderPubkey = recipient;
+                break;
+            }
+            // Check if this is our own outgoing message (conversation identity)
+            if (data.conversationIdentity && data.conversationIdentity.publicKey === event.pubkey) {
                 conversationId = recipient;
                 senderPubkey = recipient;
                 break;

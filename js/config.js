@@ -39,6 +39,7 @@ const messageSendingStatus = new Map(); // eventId -> { status: 'pending'|'sent'
 // Profile metadata state
 let profileState = {
     metadata: null,
+    updatedAt: null,
     nip05: {
         identifier: '',
         verified: false,

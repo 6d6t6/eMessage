@@ -8,9 +8,15 @@ function bootstrapApp() {
     
     initializeIncognitoState();
     initializeChatState();
+    if (typeof syncConversationsFromIncognito === 'function') {
+        syncConversationsFromIncognito();
+    }
     updateStatus();
     updateProfileAvatar();
     updateConversationsDisplay();
+    if (userKeys && typeof requestProfileMetadataNow === 'function') {
+        requestProfileMetadataNow(userKeys.publicKey);
+    }
     
     const chatInterface = document.getElementById('chatInterface');
     const chatTitle = document.getElementById('chatTitle');

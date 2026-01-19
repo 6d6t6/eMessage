@@ -323,4 +323,36 @@ async function decryptGiftWrapContentWithIdentity(encryptedContent, senderPubkey
         console.warn('Decrypt (nip44 v2 with identity) failed:', msg);
         return null;
     }
-} 
+}
+
+async function decryptGiftWrapContentForOutgoing(encryptedContent, recipientPubkey, conversationIdentity) {
+    try {
+        if (!window.NostrTools.nip44) {
+            throw new Error('NIP-44 not available in nostr-tools');
+        }
+        if (!conversationIdentity) {
+            return null;
+        }
+        
+        const identityPrivateKeyHex = conversationIdentity.privateKeyHex ||
+            (conversationIdentity.privateKey ? bytesToHex(conversationIdentity.privateKey) : null);
+        if (!identityPrivateKeyHex) {
+            return null;
+        }
+        
+        const privateKeyBytes = hexToBytes(identityPrivateKeyHex);
+        const conversationKey = window.NostrTools.nip44.getConversationKey(
+            privateKeyBytes,
+            recipientPubkey
+        );
+        
+        return window.NostrTools.nip44.v2.decrypt(encryptedContent, conversationKey);
+    } catch (error) {
+        const msg = (error && error.message) ? error.message : String(error);
+        if (msg.includes('invalid payload length') || msg.includes('unknown encryption version') || msg.includes('invalid MAC')) {
+            return null;
+        }
+        console.warn('Decrypt (outgoing nip44 v2) failed:', msg);
+        return null;
+    }
+}
