@@ -331,7 +331,7 @@ function renderProfilePanel() {
     const displayName = getDisplayNameForPubkey(pubkey);
     const secondary = getSecondaryIdentity(pubkey);
     const bannerMarkup = getBannerMarkupForPubkey(pubkey);
-    const avatarMarkup = getAvatarMarkupForPubkey(pubkey, 64);
+    const avatarMarkup = getAvatarMarkupForPubkey(pubkey, 80);
     
     panelBanner.innerHTML = `
         ${bannerMarkup}

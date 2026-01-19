@@ -972,7 +972,8 @@ body {
 
 .profile-panel-banner {
     width: 100%;
-    height: 140px;
+    /* height: 140px; (keeping for now) */
+    height: 80px;
     background: linear-gradient(135deg, #202530 0%, #242b36 60%, #1b2028 100%);
     overflow: visible;
     position: relative;
@@ -986,7 +987,7 @@ body {
 }
 
 .profile-panel-body {
-    padding: 56px 16px 16px;
+    padding: 52px 16px 16px;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
@@ -1004,11 +1005,12 @@ body {
 }
 
 .profile-panel-avatar {
-    width: 72px;
-    height: 72px;
+    /*. width: 80px;
+    height: 80px; */
     border-radius: 50%;
     background: var(--bg-tertiary);
-    border: 4px solid var(--bg-tertiary);
+    /* border: 4px solid var(--bg-tertiary); */
+    box-shadow: 0 0 0 1px var(--bg-secondary), 0 0 0 4px var(--bg-tertiary);
     /* box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35); */
     display: flex;
     align-items: center;
@@ -1021,13 +1023,13 @@ body {
 .profile-panel-banner-avatar {
     position: absolute;
     left: 16px;
-    bottom: -36px;
+    bottom: -40px;
 }
 
 .profile-panel-avatar img,
 .profile-panel-avatar svg {
-    width: 72px;
-    height: 72px;
+    width: 80px;
+    height: 80px;
     border-radius: 50%;
 }
 
@@ -1038,7 +1040,8 @@ body {
 }
 
 .profile-panel-title h3 {
-    font-size: 18px;
+    font-size: 20px;
+    line-height: 1.2;
     margin: 0;
 }
 
