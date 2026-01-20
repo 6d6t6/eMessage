@@ -1,0 +1,31 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- Rounded square background -->
+  <defs>
+    <linearGradient id="purpleGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#A855F7"/>
+      <stop offset="100%" stop-color="#7C3AED"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="32" y="32" width="448" height="448" rx="96" fill="url(#purpleGradient)"/>
+
+  <!-- Speech bubble -->
+  <path d="
+    M140 140
+    H372
+    C398 140 420 162 420 188
+    V300
+    C420 326 398 348 372 348
+    H230
+    L190 388
+    C182 396 170 390 170 380
+    V348
+    H140
+    C114 348 92 326 92 300
+    V188
+    C92 162 114 140 140 140
+    Z"
+    fill="white"
+    opacity="0.95"
+  />
+</svg>
