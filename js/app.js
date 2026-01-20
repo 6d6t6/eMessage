@@ -51,6 +51,18 @@ function bootstrapApp() {
         }, 1000);
     }
 
+    const isMobile = window.innerWidth <= 900;
+    chatState.disableMobileAutoOpen = isMobile;
+    chatState.lastConversationSelectSource = 'system';
+    if (isMobile && chatState.currentConversation) {
+        chatState.currentConversation = null;
+        chatState.suppressAutoSelectUntil = Date.now() + 2000;
+        if (typeof displayConversationMessages === 'function') {
+            displayConversationMessages(null);
+        }
+        saveChatState();
+    }
+
     syncResponsiveLayout();
 }
 

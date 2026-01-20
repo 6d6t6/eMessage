@@ -1,5 +1,17 @@
 // Chat interface and conversation management functions
 
+let mobileConversationTransitionToken = 0;
+const MOBILE_AUTOPEN_SUPPRESSION_MS = 1500;
+
+function nextMobileConversationToken() {
+    mobileConversationTransitionToken += 1;
+    return mobileConversationTransitionToken;
+}
+
+function getMobileConversationToken() {
+    return mobileConversationTransitionToken;
+}
+
 function setPanelAccessibility(element, isVisible) {
     if (!element) return;
     element.setAttribute('aria-hidden', isVisible ? 'false' : 'true');
@@ -126,7 +138,7 @@ async function startNewConversation() {
     }
     
     // Switch to conversation
-    selectConversation(conversationId);
+    selectConversation(conversationId, 'user');
     requestProfileMetadataNow(recipientHex);
     
     closeNewChatModal();
@@ -180,8 +192,13 @@ function syncConversationsFromIncognito() {
 }
 
 // Select conversation
-function selectConversation(conversationId) {
+function selectConversation(conversationId, source = 'system') {
+    const isMobile = window.innerWidth <= 900;
+    if (isMobile && chatState.disableMobileAutoOpen && source !== 'user') {
+        return;
+    }
     console.log('Selecting conversation:', conversationId);
+    chatState.lastConversationSelectSource = source;
     chatState.currentConversation = conversationId;
     
     const conversation = chatState.conversations.find(c => c.id === conversationId);
@@ -234,6 +251,9 @@ function showConversationsList() {
     const conversationsSidebar = document.querySelector('.conversations-sidebar');
     const isMobile = window.innerWidth <= 900;
     const shouldAnimate = isMobile && chatInterface && chatInterface.classList.contains('conversation-open');
+    const closeToken = nextMobileConversationToken();
+    chatState.suppressAutoSelectUntil = Date.now() + MOBILE_AUTOPEN_SUPPRESSION_MS;
+    chatState.lastConversationSelectSource = 'system';
 
     const finalizeClose = () => {
         chatState.currentConversation = null;
@@ -266,12 +286,14 @@ function showConversationsList() {
     const handleTransitionEnd = (event) => {
         if (event.propertyName !== 'transform') return;
         chatArea.removeEventListener('transitionend', handleTransitionEnd);
+        if (closeToken !== getMobileConversationToken()) return;
         finalizeClose();
     };
 
     chatArea.addEventListener('transitionend', handleTransitionEnd);
     setTimeout(() => {
         chatArea.removeEventListener('transitionend', handleTransitionEnd);
+        if (closeToken !== getMobileConversationToken()) return;
         finalizeClose();
     }, 300);
     chatInterface.classList.remove('conversation-open');
@@ -291,6 +313,7 @@ function displayConversationMessages(conversationId) {
     const isMobile = window.innerWidth <= 900;
     
     if (!conversationId) {
+        nextMobileConversationToken();
         messagesArea.style.display = 'none';
         messageInputContainer.style.display = 'none';
         chatPlaceholder.style.display = 'flex';
@@ -323,6 +346,7 @@ function displayConversationMessages(conversationId) {
     if (chatInterface) {
         const wasOpen = chatInterface.classList.contains('conversation-open');
         if (isMobile) {
+            const openToken = nextMobileConversationToken();
             if (chatArea) {
                 chatArea.style.display = 'flex';
                 setPanelAccessibility(chatArea, true);
@@ -332,21 +356,42 @@ function displayConversationMessages(conversationId) {
                 setPanelAccessibility(conversationsSidebar, false);
             }
             if (wasOpen) {
-                chatInterface.classList.add('conversation-open');
+                if (openToken === getMobileConversationToken()) {
+                    chatInterface.classList.add('conversation-open');
+                }
             } else {
                 requestAnimationFrame(() => {
                     requestAnimationFrame(() => {
-                        chatInterface.classList.add('conversation-open');
+                        if (
+                            openToken === getMobileConversationToken()
+                            && chatState.currentConversation === conversationId
+                        ) {
+                            chatInterface.classList.add('conversation-open');
+                        }
                     });
                 });
             }
             if (!wasOpen && chatArea && conversationsSidebar) {
                 const handleOpenEnd = (event) => {
                     if (event.propertyName !== 'transform') return;
+                    if (
+                        openToken !== getMobileConversationToken()
+                        || !chatInterface.classList.contains('conversation-open')
+                        || chatState.currentConversation !== conversationId
+                    ) {
+                        return;
+                    }
                     conversationsSidebar.style.display = 'none';
                 };
                 chatArea.addEventListener('transitionend', handleOpenEnd, { once: true });
                 setTimeout(() => {
+                    if (
+                        openToken !== getMobileConversationToken()
+                        || !chatInterface.classList.contains('conversation-open')
+                        || chatState.currentConversation !== conversationId
+                    ) {
+                        return;
+                    }
                     conversationsSidebar.style.display = 'none';
                 }, 300);
             }
@@ -568,7 +613,7 @@ function updateConversationsDisplay() {
         return `
             <div class="conversation-item ${conversation.id === chatState.currentConversation ? 'active' : ''}" 
                  data-conversation-id="${conversation.id}"
-                 onclick="selectConversation('${conversation.id}')">
+                 onclick="selectConversation('${conversation.id}', 'user')">
                 <div class="conversation-avatar">
                     ${avatarSVG}
                 </div>
@@ -774,7 +819,11 @@ function processIncomingMessageForConversation(event, decryptedContent) {
             displayConversationMessages(conversationId);
         } else {
             // If no conversation is currently selected, automatically select this one
-            if (!chatState.currentConversation) {
+            const suppressAutoSelect = chatState.suppressAutoSelectUntil
+                && Date.now() < chatState.suppressAutoSelectUntil;
+            const isMobile = window.innerWidth <= 900;
+            const disableAutoOpen = isMobile && chatState.disableMobileAutoOpen;
+            if (!chatState.currentConversation && !suppressAutoSelect && !disableAutoOpen) {
                 console.log('Auto-selecting conversation:', conversationId);
                 selectConversation(conversationId);
             }

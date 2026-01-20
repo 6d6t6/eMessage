@@ -127,7 +127,7 @@ function initializeNavigation() {
     // The chat interface is shown by default, and settings are accessed via the gear icon
     // Only initialize navigation if we're in settings mode
     if (chatState.showSettings) {
-        showSection('keys');
+        showSection('profile');
     }
 }
 
@@ -155,21 +155,83 @@ function showSection(sectionName) {
     if (targetNavItem) {
         targetNavItem.classList.add('active');
     }
+
+    const settingsModal = document.querySelector('#settingsModal .settings-modal');
+    if (settingsModal) {
+        const isMobile = window.innerWidth <= 900;
+        if (isMobile) {
+            settingsModal.classList.add('section-active');
+        }
+        const sidebar = settingsModal.querySelector('.settings-sidebar');
+        const content = settingsModal.querySelector('.settings-content');
+        if (typeof setPanelAccessibility === 'function') {
+            setPanelAccessibility(content, true);
+            setPanelAccessibility(sidebar, !isMobile);
+        }
+    }
+}
+
+function showSettingsHome() {
+    const settingsModal = document.querySelector('#settingsModal .settings-modal');
+    if (!settingsModal) return;
+    settingsModal.classList.remove('section-active');
+    const sidebar = settingsModal.querySelector('.settings-sidebar');
+    const content = settingsModal.querySelector('.settings-content');
+    if (typeof setPanelAccessibility === 'function') {
+        setPanelAccessibility(sidebar, true);
+        setPanelAccessibility(content, false);
+    }
+}
+
+function closeSettings() {
+    const settingsOverlay = document.getElementById('settingsModal');
+    if (!settingsOverlay) return;
+    chatState.showSettings = false;
+    settingsOverlay.classList.remove('active');
+    const settingsModal = settingsOverlay.querySelector('.settings-modal');
+    if (settingsModal) {
+        settingsModal.classList.remove('section-active');
+        const sidebar = settingsModal.querySelector('.settings-sidebar');
+        const content = settingsModal.querySelector('.settings-content');
+        if (typeof setPanelAccessibility === 'function') {
+            setPanelAccessibility(sidebar, false);
+            setPanelAccessibility(content, false);
+        }
+    }
+}
+
+function openSettings() {
+    const settingsOverlay = document.getElementById('settingsModal');
+    if (!settingsOverlay) return;
+    chatState.showSettings = true;
+    settingsOverlay.classList.add('active');
+    showSection('profile');
+    if (window.innerWidth <= 900) {
+        showSettingsHome();
+    }
+}
+
+function handleSettingsBack() {
+    const settingsModal = document.querySelector('#settingsModal .settings-modal');
+    if (!settingsModal) return;
+    const isMobile = window.innerWidth <= 900;
+    if (!isMobile) {
+        closeSettings();
+        return;
+    }
+    if (settingsModal.classList.contains('section-active')) {
+        showSettingsHome();
+    } else {
+        closeSettings();
+    }
 }
 
 // Settings panel management
 function toggleSettings() {
-    const settingsModal = document.getElementById('settingsModal');
-    const chatInterface = document.getElementById('chatInterface');
-    
-    chatState.showSettings = !chatState.showSettings;
-    
     if (chatState.showSettings) {
-        settingsModal.classList.add('active');
-        // Initialize navigation for settings
-        showSection('keys');
+        closeSettings();
     } else {
-        settingsModal.classList.remove('active');
+        openSettings();
     }
 }
 
