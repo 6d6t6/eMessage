@@ -567,6 +567,9 @@ function copyConversationDetailsToClipboard() {
 // Legacy messages display (for settings panel)
 function updateMessagesDisplay() {
     const messagesList = document.getElementById('messagesList');
+    if (!messagesList) {
+        return;
+    }
     
     if (receivedMessages.length === 0) {
         messagesList.innerHTML = `
