@@ -2,6 +2,8 @@
 
 // Save chat state to localStorage
 function saveChatState() {
+    if (typeof window !== 'undefined' && window.__EMESSAGE_SIGNED_OUT__) return;
+    if (!userKeys) return;
     try {
         const stateToSave = {
             conversations: chatState.conversations,
@@ -86,6 +88,8 @@ function initializeChatState() {
 
 // Save profile metadata to localStorage
 function saveProfileState() {
+    if (typeof window !== 'undefined' && window.__EMESSAGE_SIGNED_OUT__) return;
+    if (!userKeys) return;
     try {
         localStorage.setItem('profileState', JSON.stringify(profileState));
     } catch (error) {
@@ -124,6 +128,8 @@ function loadProfileState() {
 
 // Save profile cache to localStorage
 function saveProfileCache() {
+    if (typeof window !== 'undefined' && window.__EMESSAGE_SIGNED_OUT__) return;
+    if (!userKeys) return;
     try {
         const cacheObj = {};
         profileCache.forEach((value, key) => {
@@ -150,6 +156,8 @@ function loadProfileCache() {
 
 // Save relay settings to localStorage
 function saveRelaySettings() {
+    if (typeof window !== 'undefined' && window.__EMESSAGE_SIGNED_OUT__) return;
+    if (!userKeys) return;
     try {
         localStorage.setItem('relaySettings', JSON.stringify(relaySettings));
     } catch (error) {
@@ -188,6 +196,8 @@ function loadRelaySettings() {
 
 // Save incognito state to localStorage
 function saveIncognitoState() {
+    if (typeof window !== 'undefined' && window.__EMESSAGE_SIGNED_OUT__) return;
+    if (!userKeys) return;
     try {
         // Convert conversations to serializable format
         const conversationsObj = {};
@@ -300,6 +310,8 @@ function loadStoredMessages() {
 
 // Save messages to localStorage (legacy system)
 function saveMessages() {
+    if (typeof window !== 'undefined' && window.__EMESSAGE_SIGNED_OUT__) return;
+    if (!userKeys) return;
     try {
         localStorage.setItem('receivedMessages', JSON.stringify(receivedMessages));
     } catch (error) {

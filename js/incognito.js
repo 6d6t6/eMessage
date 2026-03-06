@@ -811,13 +811,13 @@ async function handleIncognitoMessage(event) {
                     const payload = JSON.parse(fallbackDecrypted);
                     const originalMessage = payload && payload.event ? payload.event : payload;
                     if (originalMessage && originalMessage.pubkey) {
+                        senderPubkey = originalMessage.pubkey;
                         const candidate = incognitoState.conversations.get(originalMessage.pubkey);
                         if (candidate) {
-                            senderPubkey = originalMessage.pubkey;
                             conversationData = candidate;
-                            decryptedContentFromLookup = fallbackDecrypted;
-                            console.log('Resolved conversation by decrypted sender pubkey:', senderPubkey);
                         }
+                        decryptedContentFromLookup = fallbackDecrypted;
+                        console.log('Resolved sender pubkey by decrypted payload:', senderPubkey);
                     }
                 }
             } catch (error) {
@@ -832,7 +832,7 @@ async function handleIncognitoMessage(event) {
             return;
         }
         
-        if (!senderPubkey || !conversationData) {
+        if (!senderPubkey || (!conversationData && !decryptedContentFromLookup)) {
             // Check if this might be a message that arrived before invitation processing
             // Store it temporarily and retry later
             addPendingMessage(event);
@@ -846,7 +846,7 @@ async function handleIncognitoMessage(event) {
         }
         
         // If this is a reply from the recipient's sender identity, update our conversation data
-        if (conversationData.conversationPubkey !== event.pubkey && !conversationData.recipientReplyIdentity) {
+        if (conversationData && conversationData.conversationPubkey !== event.pubkey && !conversationData.recipientReplyIdentity) {
             // This is likely a reply from the recipient - store their reply identity
             conversationData.recipientReplyIdentity = {
                 publicKey: event.pubkey
@@ -861,7 +861,7 @@ async function handleIncognitoMessage(event) {
         try {
             if (decryptedContentFromLookup) {
                 decryptedContent = decryptedContentFromLookup;
-            } else if (conversationData.conversationIdentity && conversationData.conversationIdentity.publicKey === event.pubkey) {
+            } else if (conversationData && conversationData.conversationIdentity && conversationData.conversationIdentity.publicKey === event.pubkey) {
                 decryptedContent = await decryptGiftWrapContentForOutgoing(
                     event.content,
                     conversationData.recipient,
