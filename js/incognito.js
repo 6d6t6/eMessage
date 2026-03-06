@@ -930,7 +930,7 @@ async function handleIncognitoMessage(event) {
                 }
                 
                 // Process message for conversation interface ONLY
-                processIncomingMessageForConversation(event, decryptedContent);
+                processIncomingMessageForConversation(event, decryptedContent, senderPubkey);
                 
                 // Don't add to legacy system to avoid duplication
                 

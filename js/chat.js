@@ -449,10 +449,10 @@ function displayConversationMessages(conversationId) {
         if (message.sent) {
             senderDisplayName = getDisplayNameForPubkey(userKeys.publicKey);
         } else {
-            senderDisplayName = getDisplayNameForPubkey(chatState.currentConversation);
+            senderDisplayName = getDisplayNameForPubkey(conversationId);
         }
         const senderInitial = senderDisplayName.charAt(0).toUpperCase();
-        const senderPubkey = message.sent ? userKeys.publicKey : chatState.currentConversation;
+        const senderPubkey = message.sent ? userKeys.publicKey : conversationId;
         const avatarSVG = getAvatarMarkupForPubkey(senderPubkey, 40);
         
         // Determine message status and styling
@@ -648,7 +648,7 @@ function updateConversationsDisplay() {
 }
 
 // Process incoming message for conversation
-function processIncomingMessageForConversation(event, decryptedContent) {
+function processIncomingMessageForConversation(event, decryptedContent, conversationIdOverride = null) {
     console.log('Processing incoming message for conversation:', event.pubkey);
     try {
         const parsedPayload = JSON.parse(decryptedContent);
@@ -674,42 +674,21 @@ function processIncomingMessageForConversation(event, decryptedContent) {
         processedMessageIds.add(messageKey);
         
         // Find which conversation this belongs to
-        let conversationId = null;
-        let senderPubkey = null;
-        for (const [recipient, data] of incognitoState.conversations) {
-            // Check if this is a message from their conversation identity (initial messages)
-            if (data.conversationPubkey === event.pubkey) {
-                conversationId = recipient;
-                senderPubkey = recipient;
-                break;
-            }
-            // Check if this is our own outgoing message (conversation identity)
-            if (data.conversationIdentity && data.conversationIdentity.publicKey === event.pubkey) {
-                conversationId = recipient;
-                senderPubkey = recipient;
-                break;
-            }
-            // Check if this is a reply from the recipient's reply identity
-            if (data.recipientReplyIdentity && data.recipientReplyIdentity.publicKey === event.pubkey) {
-                conversationId = recipient;
-                senderPubkey = recipient;
-                break;
-            }
-        }
-        
-        // If we didn't find a conversation but we have conversations, this might be a reply from the recipient
-        if (!conversationId && incognitoState.conversations.size > 0) {
-            console.log('No exact match found in processIncomingMessageForConversation, checking if this is a reply from recipient...');
-            
-            // Look for any conversation where this could be a reply from the recipient
+        let conversationId = conversationIdOverride;
+        let senderPubkey = conversationIdOverride;
+        if (!conversationId) {
             for (const [recipient, data] of incognitoState.conversations) {
-                // If this pubkey doesn't match our conversation identity or sender identity, 
-                // and we don't have a recipientReplyIdentity yet, this might be the first reply
-                if (data.conversationPubkey !== event.pubkey && 
-                    (!data.senderIdentity || data.senderIdentity.publicKey !== event.pubkey) &&
-                    !data.recipientReplyIdentity) {
-                    
-                    console.log('Found potential recipient reply for conversation in processIncomingMessageForConversation:', recipient);
+                if (data.conversationPubkey === event.pubkey) {
+                    conversationId = recipient;
+                    senderPubkey = recipient;
+                    break;
+                }
+                if (data.conversationIdentity && data.conversationIdentity.publicKey === event.pubkey) {
+                    conversationId = recipient;
+                    senderPubkey = recipient;
+                    break;
+                }
+                if (data.recipientReplyIdentity && data.recipientReplyIdentity.publicKey === event.pubkey) {
                     conversationId = recipient;
                     senderPubkey = recipient;
                     break;
