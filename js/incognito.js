@@ -803,29 +803,6 @@ async function handleIncognitoMessage(event) {
             }
         }
         
-        // If we didn't find a conversation but we have conversations, this might be a reply from the recipient
-        if (!senderPubkey && incognitoState.conversations.size > 0) {
-            console.log('No exact match found, checking if this is a reply from recipient...');
-            
-            // Look for any conversation where this could be a reply from the recipient
-            for (const [recipient, data] of incognitoState.conversations) {
-                // If this pubkey doesn't match our conversation identity or sender identity, 
-                // and we don't have a recipientReplyIdentity yet, this might be the first reply
-                if (data.conversationPubkey !== event.pubkey && 
-                    (!data.senderIdentity || data.senderIdentity.publicKey !== event.pubkey) &&
-                    !data.recipientReplyIdentity) {
-                    
-                    console.log('Found potential recipient reply for conversation:', recipient);
-                    console.log('- Our conversation identity:', data.conversationPubkey);
-                    console.log('- Our sender identity:', data.senderIdentity?.publicKey);
-                    console.log('- Event pubkey (recipient reply):', event.pubkey);
-                    senderPubkey = recipient;
-                    conversationData = data;
-                    break;
-                }
-            }
-        }
-        
         let decryptedContentFromLookup = null;
         if (!senderPubkey) {
             try {
