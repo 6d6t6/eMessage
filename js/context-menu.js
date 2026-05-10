@@ -49,8 +49,19 @@ function initContextMenu() {
     
     // Prevent context menu from closing when clicking inside it
     contextMenu.addEventListener('click', (e) => {
-        // Don't stop propagation if it's a back button on mobile
-        if (e.target.closest('.submenu-back-item')) return;
+        // Handle mobile back button
+        const backBtn = e.target.closest('.submenu-back-item');
+        if (backBtn && window.innerWidth <= 900) {
+            e.preventDefault();
+            e.stopPropagation();
+            // Find the parent item that has this submenu
+            const parentItem = backBtn.closest('.has-submenu.submenu-open');
+            if (parentItem) {
+                parentItem.classList.remove('submenu-open');
+            }
+            return;
+        }
+        
         e.stopPropagation();
     });
     
@@ -233,6 +244,7 @@ async function showEditableContextMenu(event, target) {
     } catch (_) {}
 
     menu.innerHTML = `
+        <div class="context-menu-drag-handle"></div>
         <div class="context-menu-item ${canCut ? '' : 'disabled'}" onclick="cutFromEditable()">
             <span class="material-symbols-rounded">content_cut</span>
             Cut
@@ -570,6 +582,7 @@ function showContextMenu(event, messageElement, message, nostrEvent) {
     // Reset context menu to message options
     const contextMenu = document.getElementById('contextMenu');
     contextMenu.innerHTML = `
+        <div class="context-menu-drag-handle"></div>
         ${hasSelection ? `
         <div class="context-menu-item" onclick="copySelectedText()">
             <span class="material-symbols-rounded">content_copy</span>
@@ -598,21 +611,6 @@ function showContextMenu(event, messageElement, message, nostrEvent) {
                     <span class="material-symbols-rounded">block</span>
                     No Tools Available
                 </div>
-                <!-- 
-                *** NESTED TEMPLATE: ***
-                <div class="context-menu-item has-submenu">
-                    <span class="material-symbols-rounded">your_icon</span>
-                    Your Menu Text
-                    <span class="material-symbols-rounded submenu-arrow">chevron_right</span>
-                    <div class="context-submenu">
-                        <div class="context-menu-item" onclick="yourFunction()">
-                            <span class="material-symbols-rounded">icon</span>
-                            Submenu Option
-                        </div>
-                        *** You can nest even deeper by adding has-submenu to any item above ***
-                    </div>
-                </div>
-                -->
             </div>
         </div>
         <div class="context-menu-separator"></div>
@@ -629,6 +627,11 @@ function showContextMenu(event, messageElement, message, nostrEvent) {
     const isMobile = window.innerWidth <= 900;
     const overlay = document.getElementById('contextMenuOverlay');
     
+    // Cancel any pending .horizontal class removal from a previous menu close
+    if (_horizontalClassRemoveTimer) {
+        clearTimeout(_horizontalClassRemoveTimer);
+        _horizontalClassRemoveTimer = null;
+    }
     contextMenu.classList.remove('horizontal');
     if (overlay) overlay.classList.remove('horizontal-overlay');
     
@@ -1164,6 +1167,8 @@ function showPubkeyContextMenu(event, element, pubkey, label) {
 }
 
 function flipAnySubmenus(menuRoot) {
+    if (window.innerWidth <= 900) return; // Skip on mobile where submenus are full-page slide-ins
+
     requestAnimationFrame(() => {
         flipSubmenusRecursive(menuRoot);
     });
@@ -1185,6 +1190,7 @@ function flipAnySubmenus(menuRoot) {
 
 // Recursive function to flip submenus at any nesting level
 function flipSubmenusRecursive(menuElement) {
+    if (window.innerWidth <= 900) return; // Skip on mobile
     const parents = menuElement.querySelectorAll('.context-menu-item.has-submenu');
     parents.forEach(parentItem => {
         const submenu = parentItem.querySelector('.context-submenu');
@@ -1289,37 +1295,60 @@ function positionContextMenu(event, menu) {
 
 // Setup mobile submenus (nested pages)
 function setupMobileSubmenus(menu) {
+    if (window.innerWidth > 900) return;
+
     const itemsWithSubmenu = menu.querySelectorAll('.context-menu-item.has-submenu');
     itemsWithSubmenu.forEach(item => {
         const submenu = item.querySelector('.context-submenu');
         if (!submenu) return;
         
-        // Check if back button already exists
-        if (!submenu.querySelector('.submenu-back-item')) {
-            const backItem = document.createElement('div');
-            backItem.className = 'submenu-back-item';
-            // Get label from parent item
-            const labelText = Array.from(item.childNodes)
-                .filter(node => node.nodeType === Node.TEXT_NODE)
-                .map(node => node.textContent.trim())
-                .join(' ') || 'Back';
-                
-            backItem.innerHTML = `
-                <span class="material-symbols-rounded">arrow_back</span>
-                ${labelText}
-            `;
-            backItem.onclick = (e) => {
-                e.stopPropagation();
-                item.classList.remove('submenu-open');
-            };
-            submenu.insertBefore(backItem, submenu.firstChild);
-        }
+        // Ensure no duplicate back buttons
+        const existingBack = submenu.querySelector('.submenu-back-item');
+        if (existingBack) existingBack.remove();
+
+        const backItem = document.createElement('div');
+        backItem.className = 'context-submenu-header submenu-back-item';
         
-        // Update item click to open submenu on mobile instead of doing nothing
+        // Extract label from parent item
+        let labelText = Array.from(item.childNodes)
+            .filter(node => node.nodeType === Node.TEXT_NODE)
+            .map(node => node.textContent.trim())
+            .filter(text => text.length > 0)
+            .join(' ') || 'Back';
+            
+        if (labelText.length > 24) labelText = labelText.substring(0, 21) + '...';
+
+        backItem.innerHTML = `
+            <div class="submenu-back-btn">
+                <span class="material-symbols-rounded">arrow_back</span>
+            </div>
+            <div class="submenu-header-title">${labelText}</div>
+        `;
+        
+        submenu.insertBefore(backItem, submenu.firstChild);
+        
+        // Update item click to open submenu on mobile
         item.onclick = (e) => {
             if (window.innerWidth <= 900) {
+                // If we clicked inside an already open submenu, let it bubble
+                // (Global listener handles back button, item actions fire on targets)
+                if (submenu.contains(e.target)) {
+                    return;
+                }
+                
+                e.preventDefault();
                 e.stopPropagation();
+                
+                // Close any sibling submenus first
+                const parent = item.parentElement;
+                if (parent) {
+                    parent.querySelectorAll('.submenu-open').forEach(openItem => {
+                        if (openItem !== item) openItem.classList.remove('submenu-open');
+                    });
+                }
+                
                 item.classList.add('submenu-open');
+                submenu.scrollTop = 0;
             }
         };
     });
@@ -1340,8 +1369,10 @@ function initContextMenuGestures() {
         // Don't drag if we're inside a submenu (it covers the whole menu)
         if (e.target.closest('.context-submenu')) return;
         
-        // Only allow dragging from the drag handle or if at the top of scroll
-        if (!e.target.closest('.context-menu-drag-handle') && menu.scrollTop > 0) return;
+        // Only allow dragging from the top area of the menu (where the handle is)
+        const rect = menu.getBoundingClientRect();
+        const relativeY = e.touches[0].clientY - rect.top;
+        if (relativeY > 40 && menu.scrollTop > 0) return;
 
         startY = e.touches[0].clientY;
         isDragging = true;
