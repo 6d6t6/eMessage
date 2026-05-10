@@ -163,10 +163,6 @@ function loadProfileCache() {
 // Save relay settings to localStorage
 function saveRelaySettings() {
     if (typeof window !== 'undefined' && window.__EMESSAGE_SIGNED_OUT__) return;
-<<<<<<< HEAD
-=======
-    if (!userKeys) return;
->>>>>>> 7bb2c38b53fbf0252ce99b06870cc2467a03bd99
     try {
         localStorage.setItem(getUserScopedStorageKey('relaySettings'), JSON.stringify(relaySettings));
     } catch (error) {
