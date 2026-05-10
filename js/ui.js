@@ -943,57 +943,24 @@ function initGestures() {
 
 // Initialize swipe to close for profile modal
 function initProfileModalSwipe() {
-    const modal = document.querySelector('.user-profile-modal');
+    const overlay = document.getElementById('userProfileModal');
+    const modal = overlay ? overlay.querySelector('.user-profile-modal') : null;
     if (!modal) return;
 
-    let startY = 0;
-    let currentY = 0;
-    let isDragging = false;
-
-    modal.addEventListener('touchstart', (e) => {
-        e.stopPropagation();
-        if (window.innerWidth > 900) return;
-        
-        // Only allow dragging from the top area or when scrolled to top
-        const body = modal.querySelector('.user-profile-body');
-        if (body && body.scrollTop > 0 && e.target.closest('.user-profile-body')) return;
-
-        startY = e.touches[0].clientY;
-        isDragging = true;
-        modal.style.transition = 'none';
-    }, { passive: true });
-
-    modal.addEventListener('touchmove', (e) => {
-        e.stopPropagation();
-        if (!isDragging) return;
-        
-        currentY = e.touches[0].clientY;
-        const deltaY = currentY - startY;
-
-        if (deltaY > 0) {
-            modal.style.transform = `translateY(${deltaY}px)`;
-        }
-    }, { passive: true });
-
-    modal.addEventListener('touchend', (e) => {
-        e.stopPropagation();
-        if (!isDragging) return;
-        isDragging = false;
-        
-        const deltaY = currentY - startY;
-        modal.style.transition = 'transform 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.1)';
-
-        if (deltaY > 150) {
+    BottomSheetGestures.init({
+        element: modal,
+        overlay: overlay,
+        onClose: () => {
             closeUserProfile();
-            setTimeout(() => {
-                modal.style.transform = '';
-            }, 300);
-        } else {
-            modal.style.transform = 'translateY(0)';
+        },
+        canDrag: (e) => {
+            const body = modal.querySelector('.user-profile-body');
+            const header = modal.querySelector('.user-profile-header');
+            const isHeader = e.target.closest('.user-profile-header') || e.target.closest('.user-profile-drag-handle');
+            
+            if (isHeader) return true;
+            return body && body.scrollTop <= 0;
         }
-        
-        startY = 0;
-        currentY = 0;
     });
 }
 

@@ -652,39 +652,42 @@ function showContextMenu(event, messageElement, message, nostrEvent) {
 
 // Hide context menu
 function hideContextMenu() {
-    if (contextMenu) {
-        const wasHorizontal = contextMenu.classList.contains('horizontal');
-        contextMenu.classList.remove('show');
-        contextMenu.querySelectorAll('.submenu-open').forEach(el => el.classList.remove('submenu-open'));
-        if (wasHorizontal) {
-            // Delay .horizontal removal until after the 0.15s fade so it doesn't
-            // briefly flash as a bottom-sheet. Store ID so it can be cancelled.
-            if (_horizontalClassRemoveTimer) clearTimeout(_horizontalClassRemoveTimer);
-            _horizontalClassRemoveTimer = setTimeout(() => {
-                _horizontalClassRemoveTimer = null;
-                if (contextMenu) contextMenu.classList.remove('horizontal');
-            }, 200);
-        } else {
-            // Not horizontal — also cancel any pending removal from a previous menu
-            if (_horizontalClassRemoveTimer) {
-                clearTimeout(_horizontalClassRemoveTimer);
-                _horizontalClassRemoveTimer = null;
-            }
-            contextMenu.classList.remove('horizontal');
+    if (!contextMenu) return;
+
+    // Reset horizontal bar state if applicable
+    const wasHorizontal = contextMenu.classList.contains('horizontal');
+    if (wasHorizontal) {
+        window.__currentEditableEl = null;
+        if (_horizontalClassRemoveTimer) clearTimeout(_horizontalClassRemoveTimer);
+        _horizontalClassRemoveTimer = setTimeout(() => {
+            _horizontalClassRemoveTimer = null;
+            if (contextMenu) contextMenu.classList.remove('horizontal');
+        }, 200);
+    } else {
+        if (_horizontalClassRemoveTimer) {
+            clearTimeout(_horizontalClassRemoveTimer);
+            _horizontalClassRemoveTimer = null;
         }
+        contextMenu.classList.remove('horizontal');
     }
+
+    // Reset targets and submenus
+    if (contextMenuTarget) {
+        contextMenuTarget.classList.remove('context-menu-active');
+        contextMenuTarget = null;
+    }
+    contextMenu.querySelectorAll('.submenu-open').forEach(el => el.classList.remove('submenu-open'));
+    window.__contextMenuOpenType = null;
+    
+    // Trigger animations via classes
+    contextMenu.classList.remove('show');
     const overlay = document.getElementById('contextMenuOverlay');
     if (overlay) {
         overlay.classList.remove('active');
         overlay.classList.remove('horizontal-overlay');
     }
-    window.__contextMenuOpenType = null;
-    if (contextMenuTarget) {
-        contextMenuTarget.classList.remove('context-menu-active');
-        contextMenuTarget = null;
-    }
     document.body.classList.remove('context-menu-open');
-    hideSelectionHandles();
+    if (typeof hideSelectionHandles === 'function') hideSelectionHandles();
 }
 
 // Copy message text to clipboard
@@ -1357,57 +1360,27 @@ function setupMobileSubmenus(menu) {
 // Mobile gestures for context menu
 function initContextMenuGestures() {
     const menu = document.getElementById('contextMenu');
+    const overlay = document.getElementById('contextMenuOverlay');
     if (!menu) return;
 
-    let startY = 0;
-    let currentY = 0;
-    let isDragging = false;
-
-    menu.addEventListener('touchstart', (e) => {
-        if (window.innerWidth > 900) return;
-        
-        // Don't drag if we're inside a submenu (it covers the whole menu)
-        if (e.target.closest('.context-submenu')) return;
-        
-        // Only allow dragging from the top area of the menu (where the handle is)
-        const rect = menu.getBoundingClientRect();
-        const relativeY = e.touches[0].clientY - rect.top;
-        if (relativeY > 40 && menu.scrollTop > 0) return;
-
-        startY = e.touches[0].clientY;
-        isDragging = true;
-        menu.style.transition = 'none';
-    }, { passive: true });
-
-    menu.addEventListener('touchmove', (e) => {
-        if (!isDragging) return;
-        
-        currentY = e.touches[0].clientY;
-        const deltaY = currentY - startY;
-
-        if (deltaY > 0) {
-            menu.style.transform = `translateY(${deltaY}px)`;
-        }
-    }, { passive: true });
-
-    menu.addEventListener('touchend', (e) => {
-        if (!isDragging) return;
-        isDragging = false;
-        
-        const deltaY = currentY - startY;
-        menu.style.transition = 'transform 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.1)';
-
-        if (deltaY > 150) {
+    BottomSheetGestures.init({
+        element: menu,
+        overlay: overlay,
+        onClose: () => {
             hideContextMenu();
-            setTimeout(() => {
-                menu.style.transform = '';
-            }, 300);
-        } else {
-            menu.style.transform = 'translateY(0)';
+        },
+        canDrag: (e) => {
+            if (menu.classList.contains('horizontal')) return false;
+            
+            // If we're in a submenu, check its scroll
+            const submenu = e.target.closest('.context-submenu');
+            if (submenu) {
+                return submenu.scrollTop <= 0;
+            }
+            
+            // Otherwise check main menu scroll
+            return menu.scrollTop <= 0;
         }
-        
-        startY = 0;
-        currentY = 0;
     });
 }
 

@@ -41,6 +41,7 @@
     /* Transitions */
     --transition-fast: 0.1s ease;
     --transition-normal: 0.2s ease;
+    --bg-overlay: rgba(0, 0, 0, 0.5);
     --profile-panel-width: 320px;
     --sidebar-width: 300px;
 
@@ -1551,14 +1552,14 @@ body {
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(0, 0, 0, 0.8);
+    background: var(--bg-overlay);
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 1000;
+    z-index: 6000;
     opacity: 0;
     visibility: hidden;
-    transition: all 0.3s ease;
+    transition: opacity 0.3s ease, visibility 0s 0.3s;
 }
 
 .modal-overlay.active {
@@ -1816,7 +1817,7 @@ body {
         height: 100%;
         box-shadow: none;
         margin: 0;
-        z-index: 9999;
+        z-index: 5000;
         padding-top: 0;
         border-left: none !important;
         background: var(--bg-primary);
@@ -2843,8 +2844,8 @@ body {
 @media (max-width: 900px) {
     #contextMenuOverlay.active:not(.horizontal-overlay) {
         background: rgba(0, 0, 0, 0.5);
-        backdrop-filter: blur(4px);
-        -webkit-backdrop-filter: blur(4px);
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
         pointer-events: all;
     }
 }
@@ -3419,7 +3420,6 @@ body.context-menu-open .sel-handle {
     justify-content: center;
     cursor: pointer;
     z-index: 2;
-    backdrop-filter: blur(4px);
     transition: background 0.2s ease;
 }
 
@@ -3552,9 +3552,30 @@ body.context-menu-open .sel-handle {
 /* Mobile Bottom Sheet for User Profile and Context Menus */
 @media (max-width: 900px) {
 
+    #settingsModal.modal-overlay {
+        z-index: 9000;
+    }
+
     #userProfileModal,
     #contextMenuOverlay {
         align-items: flex-end;
+        z-index: 7000;
+        background: var(--bg-overlay);
+        transition: opacity 0.3s ease, visibility 0s 0.3s;
+    }
+
+    #contextMenuOverlay {
+        z-index: 8000;
+    }
+
+    #userProfileModal.active,
+    #contextMenuOverlay.active:not(.horizontal-overlay) {
+        opacity: 1;
+        visibility: visible;
+        transition: opacity 0.3s ease, visibility 0s;
+        background: var(--bg-overlay);
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
     }
 
     /* Bottom sheet base state (hidden) */
@@ -3578,23 +3599,23 @@ body.context-menu-open .sel-handle {
         scrollbar-width: none !important;
         
         /* Animation: Slide down */
-        transform: translateY(100%) !important;
-        opacity: 1 !important; /* Keep opaque to prevent "fading" appearance */
-        visibility: hidden !important;
+        transform: translateY(100%);
+        opacity: 1; /* Keep opaque to prevent "fading" appearance */
+        visibility: hidden;
         will-change: transform;
         transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-                    visibility 0s 0.3s !important;
-        z-index: 2001 !important;
+                    visibility 0s 0.3s;
+        z-index: 2001;
     }
 
     /* Bottom sheet active state (shown) */
     .user-profile-modal.show,
     .context-menu:not(.horizontal).show,
     #userProfileModal.active .user-profile-modal {
-        transform: translateY(0) !important;
-        visibility: visible !important;
+        transform: translateY(0);
+        visibility: visible;
         transition: transform 0.4s cubic-bezier(0.1, 0.9, 0.2, 1),
-                    visibility 0s !important;
+                    visibility 0s;
     }
 
     .message-bubble {
