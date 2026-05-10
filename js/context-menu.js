@@ -1419,6 +1419,20 @@ function deleteConversation() {
         // Remove messages
         chatState.messages.delete(currentContextConversation.id);
         
+        // Remove from incognitoState if it exists
+        if (typeof incognitoState !== 'undefined' && incognitoState.conversations) {
+            if (incognitoState.conversations.has(currentContextConversation.id)) {
+                incognitoState.conversations.delete(currentContextConversation.id);
+            }
+            if (incognitoState.disposableKeys) {
+                incognitoState.disposableKeys.delete(`${currentContextConversation.id}:sender`);
+                incognitoState.disposableKeys.delete(`${currentContextConversation.id}:conversation`);
+            }
+            if (typeof saveIncognitoState === 'function') {
+                saveIncognitoState();
+            }
+        }
+        
         // If this was the current conversation, clear it
         if (chatState.currentConversation === currentContextConversation.id) {
             chatState.currentConversation = null;
