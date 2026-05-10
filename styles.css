@@ -106,6 +106,7 @@ body {
     align-items: center;
     justify-content: center;
     height: 100vh;
+    height: var(--app-height, 100vh);
     background: radial-gradient(circle at top, #243447 0%, #16181d 45%, #111217 100%);
     padding: 24px;
 }
@@ -120,7 +121,7 @@ body {
     display: flex;
     flex-direction: column;
     gap: 16px;
-    max-height: calc(100vh - 48px);
+    max-height: calc(var(--app-height, 100vh) - 48px);
     overflow: hidden;
 }
 
@@ -215,6 +216,7 @@ body {
 .app-container {
     display: flex;
     height: 100vh;
+    height: var(--app-height, 100vh);
     background: var(--bg-primary);
 }
 
@@ -1291,6 +1293,8 @@ body {
 
 .message-content {
     display: flex;
+    height: 100%;
+    justify-content: center;
     flex-direction: column;
     gap: 2px;
     flex: 1;
@@ -1703,7 +1707,9 @@ body {
 
 /* Responsive Design */
 @media (max-width: 900px) {
-    body, .app-container {
+
+    body,
+    .app-container {
         overflow-x: hidden !important;
         position: relative;
     }
@@ -3309,6 +3315,7 @@ body.context-menu-open .context-submenu,
 body.context-menu-open .context-submenu * {
     pointer-events: auto;
 }
+
 /* User Profile Modal */
 .user-profile-modal {
     width: min(440px, 95vw);
@@ -3326,6 +3333,7 @@ body.context-menu-open .context-submenu * {
         transform: translateY(20px);
         opacity: 0;
     }
+
     to {
         transform: translateY(0);
         opacity: 1;
@@ -3478,7 +3486,13 @@ body.context-menu-open .context-submenu * {
 }
 
 /* Clickable elements */
-.message-avatar, .message-author, .profile-avatar, .profile-panel-avatar, .profile-panel-title h3, .mini-profile, .profile-panel-banner {
+.message-avatar,
+.message-author,
+.profile-avatar,
+.profile-panel-avatar,
+.profile-panel-title h3,
+.mini-profile,
+.profile-panel-banner {
     cursor: pointer;
 }
 
@@ -3488,12 +3502,15 @@ body.context-menu-open .context-submenu * {
 
 /* Mobile Bottom Sheet for User Profile and Context Menus */
 @media (max-width: 900px) {
-    #userProfileModal, #contextMenuOverlay {
+
+    #userProfileModal,
+    #contextMenuOverlay {
         align-items: flex-end;
     }
 
     /* Bottom sheet: slide up on show, slide down on hide via transition */
-    .user-profile-modal, .context-menu:not(.horizontal) {
+    .user-profile-modal,
+    .context-menu:not(.horizontal) {
         width: 100%;
         max-width: none;
         border-radius: 20px 20px 0 0;
@@ -3502,23 +3519,24 @@ body.context-menu-open .context-submenu * {
         /* Transition-based: hide reverses automatically */
         transform: translateY(100%);
         transition: transform 0.32s cubic-bezier(0.4, 0, 0.2, 1),
-                    opacity 0.32s ease,
-                    visibility 0s 0.32s;
+            opacity 0.32s ease,
+            visibility 0s 0.32s;
     }
 
-    .user-profile-modal.show, .context-menu:not(.horizontal).show {
+    .user-profile-modal.show,
+    .context-menu:not(.horizontal).show {
         transform: translateY(0);
         transition: transform 0.32s cubic-bezier(0.18, 0.89, 0.32, 1.1),
-                    opacity 0.32s ease,
-                    visibility 0s;
+            opacity 0.32s ease,
+            visibility 0s;
     }
 
     /* user-profile-modal uses .active not .show */
     #userProfileModal.active .user-profile-modal {
         transform: translateY(0);
         transition: transform 0.32s cubic-bezier(0.18, 0.89, 0.32, 1.1),
-                    opacity 0.32s ease,
-                    visibility 0s;
+            opacity 0.32s ease,
+            visibility 0s;
     }
 
     .context-menu:not(.horizontal) {
@@ -3567,15 +3585,17 @@ body.context-menu-open .context-submenu * {
         visibility: hidden;
     }
 
-    .context-menu-item.submenu-open > .context-submenu {
+    .context-menu-item.submenu-open>.context-submenu {
         transform: translateX(-100%);
         visibility: visible;
-        left: 100%; /* Keep it at 100% but translate it */
+        left: 100%;
+        /* Keep it at 100% but translate it */
     }
-    
+
     /* Ensure only the active submenu is visible and above */
     .context-menu-item.submenu-open {
-        position: static; /* Let submenu fill the whole context-menu container */
+        position: static;
+        /* Let submenu fill the whole context-menu container */
     }
 
     .context-submenu.show-page {
@@ -3607,16 +3627,29 @@ body.context-menu-open .context-submenu * {
     }
 
     @keyframes modalSlideUpMobile {
-        from { transform: translateY(100%); }
-        to { transform: translateY(0); }
+        from {
+            transform: translateY(100%);
+        }
+
+        to {
+            transform: translateY(0);
+        }
     }
 
     @keyframes contextMenuBarIn {
-        from { opacity: 0; transform: translateY(6px) scale(0.97); }
-        to { opacity: 1; transform: translateY(0) scale(1); }
+        from {
+            opacity: 0;
+            transform: translateY(6px) scale(0.97);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
     }
 
-    .user-profile-drag-handle, .context-menu-drag-handle {
+    .user-profile-drag-handle,
+    .context-menu-drag-handle {
         display: block;
         width: 40px;
         height: 4px;
@@ -3639,7 +3672,7 @@ body.context-menu-open .context-submenu * {
         flex-direction: row;
         overflow: hidden;
         background: #1e1e1e;
-        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255,255,255,0.08);
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.08);
         transform-origin: bottom center;
         /* Simple fade + micro-lift: distinct from the bottom-sheet slide */
         transform: translateY(4px) scale(0.97);
@@ -3693,7 +3726,7 @@ body.context-menu-open .context-submenu * {
     .user-profile-header {
         height: 100px;
     }
-    
+
     .user-profile-body {
         padding: 56px 20px 32px;
         overflow-y: auto;
@@ -3701,7 +3734,8 @@ body.context-menu-open .context-submenu * {
 }
 
 /* Hide handles on desktop */
-.user-profile-drag-handle, .context-menu-drag-handle {
+.user-profile-drag-handle,
+.context-menu-drag-handle {
     display: none;
 }
 

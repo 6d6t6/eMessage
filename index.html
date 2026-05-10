@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content">
     <title>emessage</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
     <link rel="stylesheet" href="styles.css">
@@ -179,6 +179,7 @@
                                     id="messageInput" 
                                     placeholder="Type your message..." 
                                     onkeydown="handleMessageKeydown(event)"
+                                    rows="1"
                                 ></textarea>
                                 <button class="send-btn" onclick="sendCurrentMessage()">
                                     <span class="material-symbols-rounded">send</span>

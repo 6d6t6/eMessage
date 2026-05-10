@@ -606,7 +606,7 @@ function sendCurrentMessage() {
     messageInput.value = '';
     
     // Auto-resize textarea
-    messageInput.style.height = 'auto';
+    messageInput.style.height = '48px';
 }
 
 // Update conversations display

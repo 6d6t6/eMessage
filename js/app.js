@@ -81,6 +81,21 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeAuthFlow();
     window.addEventListener('resize', syncResponsiveLayout);
 
+    // Setup visual viewport handling for mobile keyboards
+    function updateAppHeight() {
+        const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+        document.documentElement.style.setProperty('--app-height', `${vh}px`);
+        if (typeof scrollToBottom === 'function') {
+            scrollToBottom();
+        }
+    }
+    updateAppHeight();
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', updateAppHeight);
+    } else {
+        window.addEventListener('resize', updateAppHeight);
+    }
+
     // Auto-resize message input
     const messageInput = document.getElementById('messageInput');
     if (messageInput) {
