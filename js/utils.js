@@ -62,6 +62,73 @@ function formatTimestamp(timestamp) {
     return date.toLocaleString();
 }
 
+// Check if two timestamps are on the same day
+function isSameDay(timestamp1, timestamp2) {
+    const d1 = new Date(timestamp1 * 1000);
+    const d2 = new Date(timestamp2 * 1000);
+    return d1.getFullYear() === d2.getFullYear() &&
+           d1.getMonth() === d2.getMonth() &&
+           d1.getDate() === d2.getDate();
+}
+
+// Format short time (e.g., 12:59 PM)
+function formatShortTime(timestamp) {
+    const date = new Date(timestamp * 1000);
+    return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
+}
+
+// Format date for day divider (e.g., May 10, 2024)
+function formatDateDivider(timestamp) {
+    const date = new Date(timestamp * 1000);
+    const now = new Date();
+    
+    if (isSameDay(timestamp, now.getTime() / 1000)) {
+        return 'Today';
+    }
+    
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+    if (isSameDay(timestamp, yesterday.getTime() / 1000)) {
+        return 'Yesterday';
+    }
+    
+    return date.toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' });
+}
+
+/**
+ * Format message timestamp for display based on user requirements:
+ * Today: "1:23 PM"
+ * Yesterday: "Yesterday at 1:23 PM"
+ * Earlier: "5/7/26, 1:23 PM"
+ * @param {number} timestamp - Unix timestamp in seconds
+ * @returns {string} Formatted timestamp string
+ */
+function formatMessageTimestamp(timestamp) {
+    const date = new Date(timestamp * 1000);
+    const now = new Date();
+    const shortTime = formatShortTime(timestamp);
+
+    // Today
+    if (isSameDay(timestamp, now.getTime() / 1000)) {
+        return shortTime;
+    }
+
+    // Yesterday
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+    if (isSameDay(timestamp, yesterday.getTime() / 1000)) {
+        return `Yesterday at ${shortTime}`;
+    }
+
+    // Earlier (M/D/YY, h:mm A)
+    const datePart = date.toLocaleDateString('en-US', {
+        month: 'numeric',
+        day: 'numeric',
+        year: '2-digit'
+    });
+    return `${datePart}, ${shortTime}`;
+}
+
 // Escape HTML to prevent XSS
 function escapeHtml(text) {
     const div = document.createElement('div');

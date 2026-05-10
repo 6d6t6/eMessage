@@ -2,9 +2,18 @@
 // Creates unique, uniform, grid-based avatars based on public keys
 // Like QR codes but circular and more artistic
 
+// Cache for generated avatars to prevent excessive recalculations
+const avatarCache = new Map();
+
 // Avatar generation functions
 function generateAvatar(pubkey, size = 40) {
     if (!pubkey) return '';
+    
+    // Check cache first
+    const cacheKey = `${pubkey}_${size}`;
+    if (avatarCache.has(cacheKey)) {
+        return avatarCache.get(cacheKey);
+    }
     
     // Create a deterministic seed from the pubkey
     const seed = hashString(pubkey);
@@ -14,7 +23,11 @@ function generateAvatar(pubkey, size = 40) {
     const config = generateAvatarConfig(rng, pubkey);
     
     // Create SVG avatar
-    return createAvatarSVG(config, size);
+    const svg = createAvatarSVG(config, size);
+    
+    // Save to cache
+    avatarCache.set(cacheKey, svg);
+    return svg;
 }
 
 function hashString(str) {
@@ -961,8 +974,6 @@ function generateSpiralOrderedGridPositions(size = 100) {
     const gridSize = 32;
     const gridSpacing = radius / (gridSize * 0.45); // Balanced spacing
     
-    console.log(`Generating spiral grid: size=${size}, center=${center}, radius=${radius}, dotSize=${dotSize}, gridSpacing=${gridSpacing}`);
-    
     const allPositions = [];
     const centerGridX = Math.floor(gridSize / 2);
     const centerGridY = Math.floor(gridSize / 2);
@@ -1006,8 +1017,6 @@ function generateSpiralOrderedGridPositions(size = 100) {
             }
         }
     }
-    
-    console.log(`Grid generation: total=${totalPositions}, valid=${validPositions}, excluded=${excludedByMarkers}`);
     
     // Sort by distance from center to create spiral-like order
     allPositions.sort((a, b) => a.distance - b.distance);

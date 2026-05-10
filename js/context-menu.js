@@ -23,18 +23,34 @@ let currentContextMessage = null;
 let currentContextEvent = null;
 let currentContextConversation = null;
 let currentContextPubkey = null;
-let currentlySpeakingMessageId = null; // Track which message is being spoken
-let contextMenuTarget = null; // Track the element that was right-clicked
+let currentlySpeakingMessageId = null;
+let contextMenuTarget = null;
+
+// Selection handle state (mobile only)
+let _selHandleNodes = null;   // { start, end } DOM elements
+let _selHandleEl = null;      // The textarea/input being tracked
+let _selHandleActive = null;  // 'start' | 'end' | null
+let _horizontalClassRemoveTimer = null; // tracks delayed .horizontal removal
 
 // Initialize context menu functionality
 function initContextMenu() {
     contextMenu = document.getElementById('contextMenu');
+    const contextMenuOverlay = document.getElementById('contextMenuOverlay');
     
     // Hide context menu when clicking outside
-    document.addEventListener('click', hideContextMenu);
+    document.addEventListener('click', (e) => {
+        // If clicking on the overlay (but not the menu itself), hide it
+        if (e.target === contextMenuOverlay) {
+            hideContextMenu();
+        } else if (!contextMenu.contains(e.target)) {
+            hideContextMenu();
+        }
+    });
     
     // Prevent context menu from closing when clicking inside it
     contextMenu.addEventListener('click', (e) => {
+        // Don't stop propagation if it's a back button on mobile
+        if (e.target.closest('.submenu-back-item')) return;
         e.stopPropagation();
     });
     
@@ -46,14 +62,15 @@ function initContextMenu() {
         
         // Close any open custom menu first (before target listeners)
         hideContextMenu();
-        
-        // If eligible, the specific target handler will handle showing the new menu
-        // via its own contextmenu listener (on the target element)
     }, true);
 
-    // Hide on resize or scroll anywhere
-    window.addEventListener('resize', hideContextMenu);
-    document.addEventListener('scroll', hideContextMenu, true);
+    // Hide on resize or scroll anywhere (except for mobile where scroll is okay inside the menu)
+    window.addEventListener('resize', () => {
+        if (window.innerWidth > 900) hideContextMenu();
+    });
+    document.addEventListener('scroll', (e) => {
+        if (window.innerWidth > 900) hideContextMenu();
+    }, true);
 
     // Hide editable menus on any key press
     document.addEventListener('keydown', () => {
@@ -61,6 +78,10 @@ function initContextMenu() {
             hideContextMenu();
         }
     }, true);
+
+    // Initialize gestures for mobile
+    initContextMenuGestures();
+    initSelectionHandles();
 }
  
 // Determine if a right-click target is eligible for a custom menu
@@ -234,9 +255,32 @@ async function showEditableContextMenu(event, target) {
     // Remember current editable element globally
     window.__currentEditableEl = el;
 
+    const isMobile = window.innerWidth <= 900;
+    const overlay = document.getElementById('contextMenuOverlay');
+
+    // Cancel any pending .horizontal class removal from a previous menu close
+    if (_horizontalClassRemoveTimer) {
+        clearTimeout(_horizontalClassRemoveTimer);
+        _horizontalClassRemoveTimer = null;
+    }
+
+    if (isMobile) {
+        menu.classList.add('horizontal');
+        if (overlay) overlay.classList.add('horizontal-overlay');
+    } else {
+        menu.classList.remove('horizontal');
+        if (overlay) overlay.classList.remove('horizontal-overlay');
+    }
+    
     positionContextMenu(event, menu);
     window.__contextMenuOpenType = 'editable';
     menu.classList.add('show');
+    if (overlay) overlay.classList.add('active');
+    
+    if (isMobile) {
+        setupMobileSubmenus(menu);
+        showSelectionHandles(el);
+    }
 }
 
 // Editable actions
@@ -582,10 +626,22 @@ function showContextMenu(event, messageElement, message, nostrEvent) {
     requestAnimationFrame(() => {
         flipAnySubmenus(contextMenu);
     });
+    const isMobile = window.innerWidth <= 900;
+    const overlay = document.getElementById('contextMenuOverlay');
+    
+    contextMenu.classList.remove('horizontal');
+    if (overlay) overlay.classList.remove('horizontal-overlay');
+    
     // Position and show menu
     positionContextMenu(event, contextMenu);
     window.__contextMenuOpenType = 'message';
     contextMenu.classList.add('show');
+    if (overlay) overlay.classList.add('active');
+    
+    // If mobile, add back buttons to submenus
+    if (isMobile) {
+        setupMobileSubmenus(contextMenu);
+    }
     
     // Disable hover effects globally (Discord-style)
     document.body.classList.add('context-menu-open');
@@ -594,22 +650,38 @@ function showContextMenu(event, messageElement, message, nostrEvent) {
 // Hide context menu
 function hideContextMenu() {
     if (contextMenu) {
+        const wasHorizontal = contextMenu.classList.contains('horizontal');
         contextMenu.classList.remove('show');
-        // Clear any dynamic HTML so measuring remains accurate next time
-        // but keep a minimal structure to avoid empty width/height
-        // We'll restore content on show
+        contextMenu.querySelectorAll('.submenu-open').forEach(el => el.classList.remove('submenu-open'));
+        if (wasHorizontal) {
+            // Delay .horizontal removal until after the 0.15s fade so it doesn't
+            // briefly flash as a bottom-sheet. Store ID so it can be cancelled.
+            if (_horizontalClassRemoveTimer) clearTimeout(_horizontalClassRemoveTimer);
+            _horizontalClassRemoveTimer = setTimeout(() => {
+                _horizontalClassRemoveTimer = null;
+                if (contextMenu) contextMenu.classList.remove('horizontal');
+            }, 200);
+        } else {
+            // Not horizontal — also cancel any pending removal from a previous menu
+            if (_horizontalClassRemoveTimer) {
+                clearTimeout(_horizontalClassRemoveTimer);
+                _horizontalClassRemoveTimer = null;
+            }
+            contextMenu.classList.remove('horizontal');
+        }
     }
-    // Reset menu type flag
+    const overlay = document.getElementById('contextMenuOverlay');
+    if (overlay) {
+        overlay.classList.remove('active');
+        overlay.classList.remove('horizontal-overlay');
+    }
     window.__contextMenuOpenType = null;
-    
-    // Remove hover effect from the right-clicked element
     if (contextMenuTarget) {
         contextMenuTarget.classList.remove('context-menu-active');
         contextMenuTarget = null;
     }
-    
-    // Re-enable hover effects globally
     document.body.classList.remove('context-menu-open');
+    hideSelectionHandles();
 }
 
 // Copy message text to clipboard
@@ -1019,6 +1091,14 @@ function showConversationContextMenu(event, conversationElement, conversation) {
     positionContextMenu(event, contextMenu);
     window.__contextMenuOpenType = 'conversation';
     contextMenu.classList.add('show');
+    const overlay = document.getElementById('contextMenuOverlay');
+    if (overlay) overlay.classList.add('active');
+    
+    // If mobile, add back buttons to submenus
+    if (window.innerWidth <= 900) {
+        setupMobileSubmenus(contextMenu);
+    }
+    
     flipAnySubmenus(contextMenu);
     
     // Disable hover effects globally (Discord-style)
@@ -1069,6 +1149,14 @@ function showPubkeyContextMenu(event, element, pubkey, label) {
     positionContextMenu(event, contextMenu);
     window.__contextMenuOpenType = isPrivateKey ? 'privateKey' : 'pubkey';
     contextMenu.classList.add('show');
+    const overlay = document.getElementById('contextMenuOverlay');
+    if (overlay) overlay.classList.add('active');
+    
+    // If mobile, add back buttons to submenus
+    if (window.innerWidth <= 900) {
+        setupMobileSubmenus(contextMenu);
+    }
+    
     flipAnySubmenus(contextMenu);
     
     // Disable hover effects globally (Discord-style)
@@ -1133,46 +1221,163 @@ function stopSpeaking() {
 }
 
 // Position context menu
-function positionContextMenu(event, contextMenu) {
-    const padding = 8; // viewport padding
-    const cursorGap = 0; // reduced gap from cursor (was 6)
-    
-    // Temporarily show to measure actual size
-    contextMenu.style.visibility = 'hidden';
-    contextMenu.style.opacity = '0';
-    contextMenu.classList.add('show');
-    const rect = contextMenu.getBoundingClientRect();
-    const menuWidth = rect.width || 180;
-    const menuHeight = rect.height || 120;
-    contextMenu.classList.remove('show');
-    contextMenu.style.visibility = '';
-    contextMenu.style.opacity = '';
-    
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-    
-    // Preferred side: right of cursor, else left
-    let x;
-    if (event.clientX + cursorGap + menuWidth + padding <= viewportWidth) {
-        x = event.clientX + cursorGap;
-    } else {
-        x = Math.max(padding, event.clientX - cursorGap - menuWidth);
+function positionContextMenu(event, menu) {
+    const isMobile = window.innerWidth <= 900;
+    const isHorizontal = menu.classList.contains('horizontal');
+
+    if (isMobile && !isHorizontal) {
+        menu.style.removeProperty('left');
+        menu.style.removeProperty('top');
+        return;
     }
-    
-    // Vertical position: try below cursor, else above
-    let y;
-    if (event.clientY + cursorGap + menuHeight + padding <= viewportHeight) {
-        y = event.clientY + cursorGap;
+
+    const padding = 8;
+    const gap = 8;
+
+    // Measure menu size while hidden
+    menu.style.visibility = 'hidden';
+    menu.style.opacity = '0';
+    menu.classList.add('show');
+    const rect = menu.getBoundingClientRect();
+    const menuWidth = rect.width || 200;
+    const menuHeight = rect.height || 44;
+    menu.classList.remove('show');
+    menu.style.visibility = '';
+    menu.style.opacity = '';
+
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    let x, y;
+
+    if (isHorizontal) {
+        const targetEl = event.target && event.target.closest('input, textarea, [contenteditable]');
+        if (targetEl) {
+            // Try to position above the selected text
+            const selRects = getTextareaSelectionRects(targetEl);
+            if (selRects) {
+                const targetRect = targetEl.getBoundingClientRect();
+                const topY = Math.max(selRects.topY, targetRect.top);
+                const bottomY = Math.min(selRects.bottomY, targetRect.bottom);
+
+                x = selRects.centerX - menuWidth / 2;
+                y = topY - menuHeight - gap;
+                if (y < padding) y = bottomY + gap;
+            } else {
+                const elRect = targetEl.getBoundingClientRect();
+                x = elRect.left + elRect.width / 2 - menuWidth / 2;
+                y = elRect.top - menuHeight - gap;
+                if (y < padding) y = elRect.bottom + gap;
+            }
+        } else {
+            x = event.clientX - menuWidth / 2;
+            y = event.clientY - menuHeight - gap;
+            if (y < padding) y = event.clientY + gap;
+        }
     } else {
-        y = Math.max(padding, event.clientY - cursorGap - menuHeight);
+        if (event.clientX + menuWidth + padding <= vw) x = event.clientX;
+        else x = Math.max(padding, event.clientX - menuWidth);
+        if (event.clientY + menuHeight + padding <= vh) y = event.clientY;
+        else y = Math.max(padding, event.clientY - menuHeight);
     }
-    
-    // Final clamps
-    x = Math.min(x, viewportWidth - padding - menuWidth);
-    y = Math.min(y, viewportHeight - padding - menuHeight);
-    
-    contextMenu.style.left = x + 'px';
-    contextMenu.style.top = y + 'px';
+
+    x = Math.max(padding, Math.min(x, vw - padding - menuWidth));
+    y = Math.max(padding, Math.min(y, vh - padding - menuHeight));
+
+    menu.style.setProperty('left', x + 'px', 'important');
+    menu.style.setProperty('top', y + 'px', 'important');
+}
+
+// Setup mobile submenus (nested pages)
+function setupMobileSubmenus(menu) {
+    const itemsWithSubmenu = menu.querySelectorAll('.context-menu-item.has-submenu');
+    itemsWithSubmenu.forEach(item => {
+        const submenu = item.querySelector('.context-submenu');
+        if (!submenu) return;
+        
+        // Check if back button already exists
+        if (!submenu.querySelector('.submenu-back-item')) {
+            const backItem = document.createElement('div');
+            backItem.className = 'submenu-back-item';
+            // Get label from parent item
+            const labelText = Array.from(item.childNodes)
+                .filter(node => node.nodeType === Node.TEXT_NODE)
+                .map(node => node.textContent.trim())
+                .join(' ') || 'Back';
+                
+            backItem.innerHTML = `
+                <span class="material-symbols-rounded">arrow_back</span>
+                ${labelText}
+            `;
+            backItem.onclick = (e) => {
+                e.stopPropagation();
+                item.classList.remove('submenu-open');
+            };
+            submenu.insertBefore(backItem, submenu.firstChild);
+        }
+        
+        // Update item click to open submenu on mobile instead of doing nothing
+        item.onclick = (e) => {
+            if (window.innerWidth <= 900) {
+                e.stopPropagation();
+                item.classList.add('submenu-open');
+            }
+        };
+    });
+}
+
+// Mobile gestures for context menu
+function initContextMenuGestures() {
+    const menu = document.getElementById('contextMenu');
+    if (!menu) return;
+
+    let startY = 0;
+    let currentY = 0;
+    let isDragging = false;
+
+    menu.addEventListener('touchstart', (e) => {
+        if (window.innerWidth > 900) return;
+        
+        // Don't drag if we're inside a submenu (it covers the whole menu)
+        if (e.target.closest('.context-submenu')) return;
+        
+        // Only allow dragging from the drag handle or if at the top of scroll
+        if (!e.target.closest('.context-menu-drag-handle') && menu.scrollTop > 0) return;
+
+        startY = e.touches[0].clientY;
+        isDragging = true;
+        menu.style.transition = 'none';
+    }, { passive: true });
+
+    menu.addEventListener('touchmove', (e) => {
+        if (!isDragging) return;
+        
+        currentY = e.touches[0].clientY;
+        const deltaY = currentY - startY;
+
+        if (deltaY > 0) {
+            menu.style.transform = `translateY(${deltaY}px)`;
+        }
+    }, { passive: true });
+
+    menu.addEventListener('touchend', (e) => {
+        if (!isDragging) return;
+        isDragging = false;
+        
+        const deltaY = currentY - startY;
+        menu.style.transition = 'transform 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.1)';
+
+        if (deltaY > 150) {
+            hideContextMenu();
+            setTimeout(() => {
+                menu.style.transform = '';
+            }, 300);
+        } else {
+            menu.style.transform = 'translateY(0)';
+        }
+        
+        startY = 0;
+        currentY = 0;
+    });
 }
 
 // Conversation context menu actions
@@ -1280,9 +1485,9 @@ function showAvatarContextMenu(event, avatarElement) {
     // Build avatar context menu
     const contextMenu = document.getElementById('contextMenu');
     contextMenu.innerHTML = `
-        <div class="context-menu-item" onclick="downloadAvatarPNG()">
+        <div class="context-menu-item" onclick="downloadAvatarImage()">
             <span class="material-symbols-rounded">download</span>
-            Download Avatar PNG
+            Download Avatar Image
         </div>
     `;
     
@@ -1290,48 +1495,148 @@ function showAvatarContextMenu(event, avatarElement) {
     positionContextMenu(event, contextMenu);
     window.__contextMenuOpenType = 'avatar';
     contextMenu.classList.add('show');
+    const overlay = document.getElementById('contextMenuOverlay');
+    if (overlay) overlay.classList.add('active');
+    
+    // If mobile, add back buttons to submenus
+    if (window.innerWidth <= 900) {
+        setupMobileSubmenus(contextMenu);
+    }
     
     // Disable hover effects globally (Discord-style)
     document.body.classList.add('context-menu-open');
 }
 
-// Download avatar as PNG
-function downloadAvatarPNG() {
+// Download avatar as Image
+async function downloadAvatarImage() {
     if (!contextMenuTarget) return;
     
-    // Find the SVG element within the avatar
+    const imgElement = contextMenuTarget.querySelector('img');
     const svgElement = contextMenuTarget.querySelector('svg');
-    if (!svgElement) {
-        showNotification('No avatar found to download', 'error');
-        return;
-    }
     
-    try {
-        // Convert SVG to PNG and download
-        const svgData = new XMLSerializer().serializeToString(svgElement);
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        const img = new Image();
-        
-        img.onload = function() {
-            canvas.width = 400;
-            canvas.height = 400;
-            ctx.fillStyle = 'white';
-            ctx.fillRect(0, 0, 400, 400);
-            ctx.drawImage(img, 0, 0, 400, 400);
+    if (imgElement && imgElement.src) {
+        try {
+            // Try to fetch it first to avoid opening in a new tab due to CORS and to ensure proper download
+            const response = await fetch(imgElement.src);
+            const blob = await response.blob();
+            const blobUrl = URL.createObjectURL(blob);
+            
+            // Determine extension from mime type
+            let ext = 'png';
+            if (blob.type) {
+                const type = blob.type.split('/')[1];
+                if (type === 'jpeg') ext = 'jpg';
+                else if (type === 'gif') ext = 'gif';
+                else if (type === 'webp') ext = 'webp';
+            } else {
+                // Try from url
+                const urlParts = imgElement.src.split('.');
+                const lastPart = urlParts[urlParts.length - 1].split('?')[0].toLowerCase();
+                if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(lastPart)) {
+                    ext = lastPart === 'jpeg' ? 'jpg' : lastPart;
+                }
+            }
             
             const link = document.createElement('a');
-            link.download = 'avatar.png';
-            link.href = canvas.toDataURL();
+            link.download = `avatar.${ext}`;
+            link.href = blobUrl;
             link.click();
             
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
             showNotification('Avatar downloaded successfully', 'success');
-        };
-        
-        img.src = 'data:image/svg+xml;base64,' + btoa(svgData);
-    } catch (error) {
-        console.error('Error downloading avatar:', error);
-        showNotification('Failed to download avatar', 'error');
+        } catch (error) {
+            try {
+                // Direct fetch failed (likely CORS). Try via multiple CORS proxies.
+                const proxies = [
+                    url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+                    url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
+                ];
+                
+                let proxyBlob = null;
+                let proxyErrorToLog = null;
+                
+                for (const proxy of proxies) {
+                    try {
+                        const proxyUrl = proxy(imgElement.src);
+                        const proxyResponse = await fetch(proxyUrl);
+                        if (!proxyResponse.ok) throw new Error(`Proxy returned ${proxyResponse.status}`);
+                        proxyBlob = await proxyResponse.blob();
+                        break; // Success
+                    } catch (e) {
+                        proxyErrorToLog = e;
+                    }
+                }
+                
+                if (!proxyBlob) {
+                    throw proxyErrorToLog || new Error("All proxies failed");
+                }
+                
+                const proxyBlobUrl = URL.createObjectURL(proxyBlob);
+                
+                // Determine extension from mime type
+                let ext = 'png';
+                if (proxyBlob.type) {
+                    const type = proxyBlob.type.split('/')[1];
+                    if (type === 'jpeg') ext = 'jpg';
+                    else if (type === 'gif') ext = 'gif';
+                    else if (type === 'webp') ext = 'webp';
+                } else {
+                    // Try from url
+                    const urlParts = imgElement.src.split('.');
+                    const lastPart = urlParts[urlParts.length - 1].split('?')[0].toLowerCase();
+                    if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(lastPart)) {
+                        ext = lastPart === 'jpeg' ? 'jpg' : lastPart;
+                    }
+                }
+                
+                const link = document.createElement('a');
+                link.download = `avatar.${ext}`;
+                link.href = proxyBlobUrl;
+                link.click();
+                
+                setTimeout(() => URL.revokeObjectURL(proxyBlobUrl), 100);
+                showNotification('Avatar downloaded successfully', 'success');
+            } catch (proxyError) {
+                console.error('Error downloading image avatar (even with proxy):', proxyError);
+                // Final fallback: just open in new tab
+                const link = document.createElement('a');
+                link.download = 'avatar';
+                link.href = imgElement.src;
+                link.target = '_blank';
+                link.click();
+                showNotification('Avatar downloaded or opened in new tab', 'success');
+            }
+        }
+    } else if (svgElement) {
+        try {
+            // Convert SVG to PNG and download
+            const svgData = new XMLSerializer().serializeToString(svgElement);
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            const img = new Image();
+            
+            img.onload = function() {
+                canvas.width = 400;
+                canvas.height = 400;
+                ctx.fillStyle = 'white';
+                ctx.fillRect(0, 0, 400, 400);
+                ctx.drawImage(img, 0, 0, 400, 400);
+                
+                const link = document.createElement('a');
+                link.download = 'avatar.png';
+                link.href = canvas.toDataURL();
+                link.click();
+                
+                showNotification('Avatar downloaded successfully', 'success');
+            };
+            
+            img.src = 'data:image/svg+xml;base64,' + btoa(svgData);
+        } catch (error) {
+            console.error('Error downloading avatar:', error);
+            showNotification('Failed to download avatar', 'error');
+        }
+    } else {
+        showNotification('No avatar found to download', 'error');
     }
     
     hideContextMenu();
@@ -1339,3 +1644,334 @@ function downloadAvatarPNG() {
 
 // Initialize context menu when DOM is loaded
 document.addEventListener('DOMContentLoaded', initContextMenu);
+
+// ─── SELECTION HELPERS & HANDLES (MOBILE) ────────────────────────────────────
+
+// Build a fixed-position invisible mirror of el to measure character positions.
+// NOTE: pointer-events is NOT set to none — caretRangeFromPoint needs to hit
+// the element's text content. The mirror exists only for the sync duration of
+// measurement and is removed before control returns.
+function _buildMirror(el) {
+    const cs = getComputedStyle(el);
+    const elRect = el.getBoundingClientRect();
+    const m = document.createElement('div');
+    
+    // Copy all text, spacing, and scrollbar layout properties
+    ['fontFamily','fontSize','fontWeight','fontStyle','fontVariant',
+     'lineHeight','letterSpacing','wordSpacing','textTransform',
+     'paddingTop','paddingRight','paddingBottom','paddingLeft',
+     'borderTopWidth','borderRightWidth','borderBottomWidth','borderLeftWidth',
+     'wordWrap','overflowWrap','wordBreak','textAlign','textIndent',
+     'direction','tabSize','whiteSpace','overflow','overflowX','overflowY'].forEach(p => {
+        try { m.style[p] = cs[p]; } catch(e) {}
+    });
+
+    if (!m.style.whiteSpace) {
+        m.style.whiteSpace = el.tagName === 'TEXTAREA' ? 'pre-wrap' : 'pre';
+    }
+
+    Object.assign(m.style, {
+        position:   'fixed',
+        left:       elRect.left + 'px',
+        top:        elRect.top  + 'px',
+        width:      elRect.width  + 'px',
+        height:     elRect.height + 'px',
+        // CRITICAL: elRect is the border-box width. If we don't force border-box,
+        // and the textarea is content-box, the mirror becomes wider by padding+border,
+        // breaking the text wrap alignment completely.
+        boxSizing:  'border-box',
+        opacity:    '0',
+        zIndex:     '9999',
+        userSelect: 'none',
+    });
+    return m;
+}
+
+// Returns precise metrics for the current selection using Range.getBoundingClientRect()
+// on the first and last characters, avoiding span injection and wrapping bugs.
+function getTextareaSelectionRects(el) {
+    if (!el || el.selectionStart === undefined) return null;
+    const start = el.selectionStart;
+    const end   = el.selectionEnd;
+    if (start === end) return null;
+
+    const text = el.value || '';
+    const m = _buildMirror(el);
+
+    // Add a zero-width space at the end to ensure trailing newlines generate line boxes
+    m.textContent = text + '\u200b';
+    document.body.appendChild(m);
+    m.scrollTop = el.scrollTop;
+
+    const textNode = m.firstChild;
+    if (!textNode) {
+        document.body.removeChild(m);
+        return null;
+    }
+
+    // Measure FIRST character of selection
+    const rangeFirst = document.createRange();
+    try {
+        rangeFirst.setStart(textNode, start);
+        rangeFirst.setEnd(textNode, Math.min(start + 1, textNode.length));
+    } catch(e) {}
+    // getClientRects() returns one rect per visual line, preventing tall boxes on wraps
+    const firstRects = Array.from(rangeFirst.getClientRects());
+    const firstRect = firstRects.length ? firstRects[0] : rangeFirst.getBoundingClientRect();
+
+    // Measure LAST character of selection
+    const rangeLast = document.createRange();
+    try {
+        rangeLast.setStart(textNode, Math.max(0, end - 1));
+        rangeLast.setEnd(textNode, end);
+    } catch(e) {}
+    const lastRects = Array.from(rangeLast.getClientRects());
+    // Use the LAST line box of the character (in case it's a wrapping space)
+    const lastRect = lastRects.length ? lastRects[lastRects.length - 1] : rangeLast.getBoundingClientRect();
+
+    // Measure ENTIRE selection for centering the horizontal bar
+    const rangeAll = document.createRange();
+    try {
+        rangeAll.setStart(textNode, start);
+        rangeAll.setEnd(textNode, end);
+    } catch(e) {}
+    const allRect = rangeAll.getBoundingClientRect();
+
+    document.body.removeChild(m);
+
+    const fallbackH = parseFloat(getComputedStyle(el).lineHeight) || 18;
+    const startH = firstRect.height || fallbackH;
+    const endH = lastRect.height || startH;
+
+    return {
+        startX:  firstRect.left,
+        startY:  firstRect.top,
+        startH:  startH,
+        endX:    lastRect.right,
+        endY:    lastRect.top,
+        endH:    endH,
+        centerX: allRect.left + (allRect.width / 2),
+        topY:    allRect.top,
+        bottomY: allRect.bottom
+    };
+}
+
+// Returns the character index in el.value closest to viewport point (x, y).
+// Clamps (x, y) to the mirror's bounds so out-of-bounds drags return an
+// edge character rather than the wrong element.
+function _getCharIndexAtPoint(el, x, y) {
+    const m = _buildMirror(el);
+    m.textContent = el.value || '';
+    document.body.appendChild(m);
+    m.scrollTop = el.scrollTop;
+
+    // Clamp to mirror bounds so dragging outside still returns a valid edge char
+    const mr = m.getBoundingClientRect();
+    const cx = Math.max(mr.left + 1, Math.min(x, mr.right  - 1));
+    const cy = Math.max(mr.top  + 1, Math.min(y, mr.bottom - 1));
+
+    let idx = 0;
+    const range = document.caretRangeFromPoint
+        ? document.caretRangeFromPoint(cx, cy)
+        : (() => {
+            if (!document.caretPositionFromPoint) return null;
+            const pos = document.caretPositionFromPoint(cx, cy);
+            if (!pos) return null;
+            const r = document.createRange();
+            r.setStart(pos.offsetNode, pos.offset);
+            r.collapse(true);
+            return r;
+        })();
+
+    if (range && m.contains(range.startContainer)) {
+        const walker = document.createTreeWalker(m, NodeFilter.SHOW_TEXT);
+        let total = 0;
+        while (walker.nextNode()) {
+            if (walker.currentNode === range.startContainer) {
+                idx = total + range.startOffset;
+                break;
+            }
+            total += walker.currentNode.length;
+        }
+    }
+    document.body.removeChild(m);
+    return Math.max(0, Math.min(idx, (el.value || '').length));
+}
+
+// Reposition context menu bar above current selection (called after selection changes)
+function _repositionBarForSelection(el) {
+    if (!contextMenu || !contextMenu.classList.contains('show')) return;
+    const rects = getTextareaSelectionRects(el);
+    if (!rects) return;
+    
+    const elRect = el.getBoundingClientRect();
+    const mw = contextMenu.offsetWidth;
+    const mh = contextMenu.offsetHeight;
+    const gap = 8, pad = 8;
+    
+    // Clamp Y bounds so the menu never floats way above/below the actual visible text box
+    const topY = Math.max(rects.topY, elRect.top);
+    const bottomY = Math.min(rects.bottomY, elRect.bottom);
+    
+    // Optional: if the entire selection is out of view, we could hide it, but clamping is safer
+    let opacity = 1;
+    if (rects.bottomY < elRect.top || rects.topY > elRect.bottom) {
+        opacity = 0; // Hide menu if completely scrolled out of view
+    }
+    
+    let bx = rects.centerX - mw / 2;
+    let by = topY - mh - gap;
+    if (by < pad) by = bottomY + gap;
+    
+    bx = Math.max(pad, Math.min(bx, window.innerWidth  - pad - mw));
+    by = Math.max(pad, Math.min(by, window.innerHeight - pad - mh));
+    
+    contextMenu.style.setProperty('left', bx + 'px', 'important');
+    contextMenu.style.setProperty('top',  by + 'px', 'important');
+    contextMenu.style.setProperty('opacity', opacity.toString(), 'important');
+}
+
+// Create the two handle DOM nodes once
+function initSelectionHandles() {
+    if (_selHandleNodes) return;
+    const make = cls => {
+        const h = document.createElement('div');
+        h.className = 'sel-handle ' + cls;
+        document.body.appendChild(h);
+        return h;
+    };
+    _selHandleNodes = { start: make('sel-handle-start'), end: make('sel-handle-end') };
+
+    // Track which handle is being dragged
+    [_selHandleNodes.start, _selHandleNodes.end].forEach((node, i) => {
+        node.addEventListener('touchstart', e => {
+            e.preventDefault();
+            e.stopPropagation();
+            _selHandleActive = i === 0 ? 'start' : 'end';
+        }, { passive: false });
+    });
+
+    let _rafPending = false;
+    document.addEventListener('touchmove', e => {
+        if (!_selHandleActive || !_selHandleEl) return;
+        e.preventDefault();
+
+        // Edge auto-scrolling for multi-line inputs
+        const el = _selHandleEl;
+        const elRect = el.getBoundingClientRect();
+        const touchY = e.touches[0].clientY;
+        const edgeThreshold = 30; // px
+        if (touchY < elRect.top + edgeThreshold) {
+            el.scrollTop -= 15;
+        } else if (touchY > elRect.bottom - edgeThreshold) {
+            el.scrollTop += 15;
+        }
+
+        if (_rafPending) return;
+        _rafPending = true;
+        const touchX = e.touches[0].clientX;
+        
+        requestAnimationFrame(() => {
+            _rafPending = false;
+            if (!_selHandleActive || !_selHandleEl) return;
+
+            const idx = _getCharIndexAtPoint(el, touchX, touchY);
+            const valLen = (el.value || '').length;
+
+            // Focus so setSelectionRange works
+            el.focus({ preventScroll: true });
+
+            let newStart = el.selectionStart;
+            let newEnd   = el.selectionEnd;
+
+            if (_selHandleActive === 'start') {
+                newStart = Math.max(0, Math.min(idx, newEnd - 1));
+            } else {
+                newEnd = Math.min(valLen, Math.max(idx, newStart + 1));
+            }
+
+            el.setSelectionRange(newStart, newEnd);
+
+            // Keep __editableSelection in sync so Cut/Copy/Paste act on the new selection
+            window.__editableSelection = { start: newStart, end: newEnd, isTextControl: true };
+
+            updateSelectionHandles(el);
+            _repositionBarForSelection(el);
+        });
+    }, { passive: false });
+
+    document.addEventListener('touchend',   () => { _selHandleActive = null; });
+    document.addEventListener('touchcancel',() => { _selHandleActive = null; });
+}
+
+let _scrollRaf = null;
+function _handleEditableScroll() {
+    if (!_selHandleEl) return;
+    if (_scrollRaf) return;
+    _scrollRaf = requestAnimationFrame(() => {
+        _scrollRaf = null;
+        if (!_selHandleEl) return;
+        updateSelectionHandles(_selHandleEl);
+        if (contextMenu && contextMenu.classList.contains('horizontal')) {
+            _repositionBarForSelection(_selHandleEl);
+        }
+    });
+}
+
+function showSelectionHandles(el) {
+    _selHandleEl = el;
+    updateSelectionHandles(el);
+    el.addEventListener('scroll', _handleEditableScroll, { passive: true });
+}
+
+function hideSelectionHandles() {
+    if (_selHandleEl) {
+        _selHandleEl.removeEventListener('scroll', _handleEditableScroll);
+        _selHandleEl = null;
+    }
+    _selHandleActive = null;
+    if (_selHandleNodes) {
+        _selHandleNodes.start.classList.remove('visible');
+        _selHandleNodes.end.classList.remove('visible');
+    }
+}
+
+function updateSelectionHandles(el) {
+    if (!_selHandleNodes || !el) return;
+    if (window.innerWidth > 900) { hideSelectionHandles(); return; }
+    const rects = getTextareaSelectionRects(el);
+    if (!rects) { hideSelectionHandles(); return; }
+
+    const { start, end } = _selHandleNodes;
+    const elRect = el.getBoundingClientRect();
+
+    // Start handle: LEFT edge of first selected character, ball on top
+    start.style.setProperty('left',      rects.startX + 'px', 'important');
+    start.style.setProperty('top',       rects.startY + 'px', 'important');
+    start.style.setProperty('height',    rects.startH + 'px', 'important');
+    start.style.setProperty('transform', 'translateX(-50%)', 'important');
+    
+    if (rects.startY + rects.startH < elRect.top || rects.startY > elRect.bottom) {
+        start.style.setProperty('opacity', '0', 'important');
+        start.style.setProperty('pointer-events', 'none', 'important');
+    } else {
+        start.style.setProperty('opacity', '1', 'important');
+        start.style.setProperty('pointer-events', 'auto', 'important');
+    }
+    start.classList.add('visible');
+
+    // End handle: RIGHT edge of last selected character, ball on bottom
+    end.style.setProperty('left',      rects.endX + 'px', 'important');
+    end.style.setProperty('top',       rects.endY + 'px', 'important');
+    end.style.setProperty('height',    rects.endH + 'px', 'important');
+    end.style.setProperty('transform', 'translateX(-50%)', 'important');
+    
+    if (rects.endY + rects.endH < elRect.top || rects.endY > elRect.bottom) {
+        end.style.setProperty('opacity', '0', 'important');
+        end.style.setProperty('pointer-events', 'none', 'important');
+    } else {
+        end.style.setProperty('opacity', '1', 'important');
+        end.style.setProperty('pointer-events', 'auto', 'important');
+    }
+    end.classList.add('visible');
+}

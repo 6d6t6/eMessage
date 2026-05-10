@@ -518,19 +518,22 @@
     </div>
 
     <!-- Context Menu -->
-    <div class="context-menu" id="contextMenu">
-        <div class="context-menu-item" onclick="copyMessageText()">
-            <span class="material-symbols-rounded">content_copy</span>
-            Copy Message
-        </div>
-        <div class="context-menu-item" onclick="copyMessageId()">
-            <span class="material-symbols-rounded">tag</span>
-            Copy Message ID
-        </div>
-        <div class="context-menu-separator"></div>
-        <div class="context-menu-item" onclick="inspectEvent()">
-            <span class="material-symbols-rounded">search</span>
-            Inspect Event
+    <div class="modal-overlay" id="contextMenuOverlay">
+        <div class="context-menu" id="contextMenu">
+            <div class="context-menu-drag-handle"></div>
+            <div class="context-menu-item" onclick="copyMessageText()">
+                <span class="material-symbols-rounded">content_copy</span>
+                Copy Message
+            </div>
+            <div class="context-menu-item" onclick="copyMessageId()">
+                <span class="material-symbols-rounded">tag</span>
+                Copy Message ID
+            </div>
+            <div class="context-menu-separator"></div>
+            <div class="context-menu-item" onclick="inspectEvent()">
+                <span class="material-symbols-rounded">search</span>
+                Inspect Event
+            </div>
         </div>
     </div>
 
@@ -574,6 +577,44 @@
                     <span class="material-symbols-rounded">content_copy</span>
                     Copy Details
                 </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- User Profile Modal (Discord-like profile popup) -->
+    <div class="modal-overlay" id="userProfileModal">
+        <div class="user-profile-modal">
+            <div class="user-profile-drag-handle"></div>
+            <div class="user-profile-header">
+                <div class="user-profile-banner" id="userProfileBanner"></div>
+                <button class="user-profile-close" onclick="closeUserProfile()">
+                    <span class="material-symbols-rounded">close</span>
+                </button>
+                <div class="user-profile-avatar-wrap">
+                    <div class="user-profile-avatar" id="userProfileAvatar"></div>
+                </div>
+            </div>
+            <div class="user-profile-body">
+                <div class="user-profile-info">
+                    <h2 id="userProfileName"></h2>
+                    <div class="user-profile-npub-wrap">
+                        <span id="userProfileNpub"></span>
+                        <button class="copy-btn" onclick="copyToClipboard('userProfileNpub')" title="Copy npub">
+                            <span class="material-symbols-rounded">content_copy</span>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="user-profile-content" id="userProfileContent">
+                    <!-- Dynamic content (About, Details, etc.) -->
+                </div>
+                
+                <div class="user-profile-footer">
+                    <button class="btn btn-primary" id="userProfileMessageBtn">
+                        <span class="material-symbols-rounded">chat</span>
+                        Message
+                    </button>
+                </div>
             </div>
         </div>
     </div>

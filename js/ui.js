@@ -33,6 +33,10 @@ function updateProfileAvatar() {
     if (profileAvatar && userKeys) {
         profileAvatar.innerHTML = getAvatarMarkupForPubkey(userKeys.publicKey, 40);
         
+        // Open own profile on click
+        profileAvatar.style.cursor = 'pointer';
+        profileAvatar.onclick = () => showUserProfile(userKeys.publicKey);
+
         // Add context menu for avatar download
         profileAvatar.addEventListener('contextmenu', (e) => {
             e.preventDefault();
@@ -46,6 +50,18 @@ function updateProfileAvatar() {
 
 // Update application status displays
 function updateStatus() {
+    const miniProfile = document.getElementById('miniProfile');
+    if (miniProfile && !miniProfile.dataset.listenerAdded) {
+        miniProfile.addEventListener('click', (e) => {
+            // Only trigger if not clicking the settings button or its icon
+            if (!e.target.closest('.profile-settings-btn')) {
+                showUserProfile(userKeys.publicKey);
+            }
+        });
+        miniProfile.dataset.listenerAdded = 'true';
+        miniProfile.style.cursor = 'pointer';
+    }
+    
     const connectionStatus = document.getElementById('connectionStatus');
     const keysStatus = document.getElementById('keysStatus');
     const messagesStatus = document.getElementById('messagesStatus');
@@ -309,6 +325,26 @@ function syncResponsiveLayout() {
     const panel = document.getElementById('profilePanel');
     if (!chatInterface) return;
 
+    // Sync Settings Modal Accessibility
+    const settingsModal = document.querySelector('#settingsModal .settings-modal');
+    if (settingsModal) {
+        const sidebar = settingsModal.querySelector('.settings-sidebar');
+        const content = settingsModal.querySelector('.settings-content');
+        const isSectionActive = settingsModal.classList.contains('section-active');
+        
+        if (typeof setPanelAccessibility === 'function') {
+            if (!isMobile) {
+                // On desktop, both are always accessible if the modal is open
+                setPanelAccessibility(sidebar, true);
+                setPanelAccessibility(content, true);
+            } else {
+                // On mobile, depends on whether we're in a section or home
+                setPanelAccessibility(sidebar, !isSectionActive);
+                setPanelAccessibility(content, isSectionActive);
+            }
+        }
+    }
+
     if (!isMobile) {
         if (chatArea) {
             chatArea.style.display = '';
@@ -409,7 +445,7 @@ function renderProfilePanel() {
     panelBody.innerHTML = `
         <div class="profile-panel-header">
             <div class="profile-panel-title">
-                <h3>${escapeHtml(displayName)}</h3>
+                <h3 onclick="showUserProfile('${pubkey}')">${escapeHtml(displayName)}</h3>
                 ${secondary ? `<div class="profile-panel-subtitle">${escapeHtml(secondary)}</div>` : ''}
                 <div class="profile-panel-npub">${formatPubkeyForDisplay(pubkey)}</div>
             </div>
@@ -421,6 +457,19 @@ function renderProfilePanel() {
             <button class="btn btn-secondary" onclick="showConversationDetails()">Inspect Conversation</button>
         </div>
     `;
+
+    // Make avatar and banner clickable in panel
+    const panelAvatar = panelBanner.querySelector('.profile-panel-avatar');
+    if (panelAvatar) {
+        panelAvatar.onclick = () => showUserProfile(pubkey);
+    }
+    panelBanner.style.cursor = 'pointer';
+    panelBanner.onclick = (e) => {
+        // Only trigger if not clicking the avatar (to avoid double trigger, though it doesn't matter much)
+        if (!e.target.closest('.profile-panel-avatar')) {
+            showUserProfile(pubkey);
+        }
+    };
 }
 
 // Show conversation details modal with conversation data
@@ -439,6 +488,7 @@ function showConversationDetailsModal(conversation) {
         ? new Date(lastMessage.timestamp * 1000).toISOString()
         : 'Never';
     
+    
     // Format the conversation data for display
     const conversationData = {
         id: conversation.id,
@@ -446,7 +496,9 @@ function showConversationDetailsModal(conversation) {
         name: conversation.name,
         lastMessage: lastMessage ? lastMessage.content : 'No messages yet',
         lastMessageTime,
-        unreadCount: conversation.unreadCount || 0,
+        unreadCount: conversation.id !== chatState.currentConversation
+            ? messages.filter(m => !m.sent && m.timestamp * 1000 > (conversation.lastReadTime || 0)).length
+            : 0,
         totalMessages: messages.length,
         sentMessages: sentMessages.length,
         receivedMessages: receivedMessages.length,
@@ -567,6 +619,9 @@ function copyConversationDetailsToClipboard() {
 // Legacy messages display (for settings panel)
 function updateMessagesDisplay() {
     const messagesList = document.getElementById('messagesList');
+    if (!messagesList) {
+        return;
+    }
     
     if (receivedMessages.length === 0) {
         messagesList.innerHTML = `
@@ -679,4 +734,404 @@ function updateMessageStatus(eventId, status, error = null) {
     }
     
     console.log('Message not found for status update:', eventId);
-} 
+}
+
+// Generic swipe back utility for mobile
+function initSwipeBack(element, onBack, options = {}) {
+    if (!element) return;
+    
+    let startX = 0;
+    let startY = 0;
+    let currentX = 0;
+    let isDragging = false;
+    let isScrolling = false;
+    const threshold = options.threshold || 100;
+    const isMobile = () => window.innerWidth <= 900;
+
+    element.addEventListener('touchstart', (e) => {
+        if (!isMobile()) return;
+        if (options.condition && !options.condition()) return;
+        
+        // Prevent horizontal swipes from bubbling up to parent swipe listeners
+        e.stopPropagation();
+
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+        isDragging = false;
+        isScrolling = false;
+        
+        // Don't set transition yet, wait for move
+    }, { passive: false });
+
+    element.addEventListener('touchmove', (e) => {
+        // Prevent bubbling to parents
+        e.stopPropagation();
+
+        const currentX_coord = e.touches[0].clientX;
+        const currentY_coord = e.touches[0].clientY;
+        const dx = currentX_coord - startX;
+        const dy = currentY_coord - startY;
+
+        if (!isDragging && !isScrolling) {
+            // Block scrolling early if horizontal intent is clear
+            if (Math.abs(dx) > 2 && Math.abs(dx) > Math.abs(dy)) {
+                if (e.cancelable) e.preventDefault();
+            }
+
+            // Determine if this is a swipe or a scroll
+            // Only allow right swipe (dx > 10)
+            if (dx > 10 && dx > Math.abs(dy)) {
+                isDragging = true;
+                element.style.transition = 'none';
+                if (options.bgElement) {
+                    options.bgElement.style.transition = 'none';
+                    options.bgElement.style.visibility = 'visible';
+                    options.bgElement.style.display = 'flex';
+                }
+            } else if (Math.abs(dy) > 10 || (dx < -10)) {
+                isScrolling = true;
+            }
+        }
+
+        if (isDragging) {
+            if (e.cancelable) e.preventDefault(); // Prevent scrolling during swipe
+            currentX = currentX_coord;
+            // Cap movement at 0 to prevent swiping left
+            const moveX = Math.max(0, dx);
+            element.style.transform = `translateX(${moveX}px)`;
+            
+            if (options.bgElement) {
+                const progress = Math.min(moveX / window.innerWidth, 1);
+                const startTranslate = options.bgStartTranslate !== undefined ? options.bgStartTranslate : -10;
+                const bgTranslate = startTranslate * (1 - progress);
+                options.bgElement.style.transform = `translateX(${bgTranslate}%)`;
+            }
+        }
+    }, { passive: false });
+
+    element.addEventListener('touchend', (e) => {
+        e.stopPropagation();
+        if (!isDragging || isScrolling) {
+            isDragging = false;
+            isScrolling = false;
+            return;
+        }
+        isDragging = false;
+        
+        const deltaX = currentX - startX;
+        const duration = 250;
+        
+        if (deltaX > threshold) {
+            // Animate completion of the swipe
+            element.style.transition = `transform ${duration}ms cubic-bezier(0.25, 0.1, 0.25, 1)`;
+            element.style.transform = `translateX(100%)`;
+            
+            if (options.bgElement) {
+                options.bgElement.style.transition = `transform ${duration}ms cubic-bezier(0.25, 0.1, 0.25, 1)`;
+                options.bgElement.style.transform = 'translateX(0)';
+            }
+
+            setTimeout(() => {
+                onBack();
+                // Reset styles after the callback has updated the DOM state
+                setTimeout(() => {
+                    element.style.transform = '';
+                    element.style.transition = '';
+                    if (options.bgElement) {
+                        options.bgElement.style.transform = '';
+                        options.bgElement.style.transition = '';
+                        options.bgElement.style.visibility = '';
+                        options.bgElement.style.display = '';
+                    }
+                }, 50);
+            }, duration);
+        } else {
+            // Animate snap back
+            element.style.transition = `transform ${duration}ms cubic-bezier(0.25, 0.1, 0.25, 1)`;
+            element.style.transform = '';
+            
+            if (options.bgElement) {
+                options.bgElement.style.transition = `transform ${duration}ms cubic-bezier(0.25, 0.1, 0.25, 1)`;
+                options.bgElement.style.transform = '';
+            }
+            
+            setTimeout(() => {
+                element.style.transition = '';
+                if (options.bgElement) {
+                    options.bgElement.style.transition = '';
+                    options.bgElement.style.visibility = '';
+                    options.bgElement.style.display = '';
+                }
+            }, duration);
+        }
+        
+        startX = 0;
+        currentX = 0;
+    });
+
+    element.addEventListener('touchcancel', (e) => {
+        e.stopPropagation();
+        if (isDragging) {
+            const duration = 250;
+            element.style.transition = `transform ${duration}ms cubic-bezier(0.25, 0.1, 0.25, 1)`;
+            element.style.transform = '';
+            
+            if (options.bgElement) {
+                options.bgElement.style.transition = `transform ${duration}ms cubic-bezier(0.25, 0.1, 0.25, 1)`;
+                options.bgElement.style.transform = '';
+            }
+            
+            setTimeout(() => {
+                element.style.transition = '';
+                if (options.bgElement) {
+                    options.bgElement.style.transition = '';
+                    options.bgElement.style.visibility = '';
+                    options.bgElement.style.display = '';
+                }
+            }, duration);
+        }
+        isDragging = false;
+        isScrolling = false;
+        startX = 0;
+        currentX = 0;
+    });
+}
+
+// Initialize all gesture navigation
+function initGestures() {
+    // 1. Chat Area Swipe Back (reveals conversations list)
+    const chatArea = document.querySelector('.chat-area');
+    const conversationsSidebar = document.querySelector('.conversations-sidebar');
+    const chatInterface = document.getElementById('chatInterface');
+    
+    initSwipeBack(chatArea, showConversationsList, {
+        bgElement: conversationsSidebar,
+        condition: () => chatInterface && chatInterface.classList.contains('conversation-open') && !document.getElementById('profilePanel').classList.contains('active')
+    });
+
+    // 2. Profile Panel Swipe Back (reveals chat area)
+    const profilePanel = document.getElementById('profilePanel');
+    initSwipeBack(profilePanel, () => {
+        if (profilePanel.classList.contains('active')) {
+            toggleProfilePanel();
+        }
+    }, {
+        bgElement: chatArea
+    });
+
+    // 3. Settings Content Swipe Back (reveals settings sidebar)
+    const settingsModal = document.querySelector('#settingsModal .settings-modal');
+    const settingsContent = document.querySelector('#settingsModal .settings-content');
+    const settingsSidebar = document.querySelector('#settingsModal .settings-sidebar');
+    initSwipeBack(settingsContent, handleSettingsBack, {
+        bgElement: settingsSidebar,
+        condition: () => settingsModal && settingsModal.classList.contains('section-active')
+    });
+    
+    // 4. Settings Modal Swipe Back (reveals app container)
+    const settingsModalOverlay = document.getElementById('settingsModal');
+    const appContainer = document.querySelector('.app-container');
+    initSwipeBack(settingsModal, closeSettings, {
+        bgElement: appContainer,
+        bgStartTranslate: 0,
+        condition: () => settingsModal && !settingsModal.classList.contains('section-active') && settingsModalOverlay.classList.contains('active')
+    });
+
+    // 5. User Profile Modal Swipe Down (Vertical)
+    initProfileModalSwipe();
+}
+
+// Initialize swipe to close for profile modal
+function initProfileModalSwipe() {
+    const modal = document.querySelector('.user-profile-modal');
+    if (!modal) return;
+
+    let startY = 0;
+    let currentY = 0;
+    let isDragging = false;
+
+    modal.addEventListener('touchstart', (e) => {
+        e.stopPropagation();
+        if (window.innerWidth > 900) return;
+        
+        // Only allow dragging from the top area or when scrolled to top
+        const body = modal.querySelector('.user-profile-body');
+        if (body && body.scrollTop > 0 && e.target.closest('.user-profile-body')) return;
+
+        startY = e.touches[0].clientY;
+        isDragging = true;
+        modal.style.transition = 'none';
+    }, { passive: true });
+
+    modal.addEventListener('touchmove', (e) => {
+        e.stopPropagation();
+        if (!isDragging) return;
+        
+        currentY = e.touches[0].clientY;
+        const deltaY = currentY - startY;
+
+        if (deltaY > 0) {
+            modal.style.transform = `translateY(${deltaY}px)`;
+        }
+    }, { passive: true });
+
+    modal.addEventListener('touchend', (e) => {
+        e.stopPropagation();
+        if (!isDragging) return;
+        isDragging = false;
+        
+        const deltaY = currentY - startY;
+        modal.style.transition = 'transform 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.1)';
+
+        if (deltaY > 150) {
+            closeUserProfile();
+            setTimeout(() => {
+                modal.style.transform = '';
+            }, 300);
+        } else {
+            modal.style.transform = 'translateY(0)';
+        }
+        
+        startY = 0;
+        currentY = 0;
+    });
+}
+
+// Show User Profile Modal
+function showUserProfile(pubkey) {
+    if (!pubkey) return;
+    
+    const modal = document.getElementById('userProfileModal');
+    const banner = document.getElementById('userProfileBanner');
+    const avatar = document.getElementById('userProfileAvatar');
+    const name = document.getElementById('userProfileName');
+    const npub = document.getElementById('userProfileNpub');
+    const content = document.getElementById('userProfileContent');
+    const messageBtn = document.getElementById('userProfileMessageBtn');
+    
+    if (!modal || !banner || !avatar || !name || !npub || !content || !messageBtn) return;
+    
+    ensureProfileFetched(pubkey);
+    const metadata = getProfileMetadata(pubkey) || {};
+    const displayName = getDisplayNameForPubkey(pubkey);
+    
+    // Set banner and avatar
+    banner.innerHTML = getBannerMarkupForPubkey(pubkey);
+    avatar.innerHTML = getAvatarMarkupForPubkey(pubkey, 80);
+    
+    // Set basic info
+    name.textContent = displayName;
+    try {
+        npub.textContent = window.NostrTools.nip19.npubEncode(pubkey);
+    } catch (e) {
+        npub.textContent = pubkey;
+    }
+    
+    // Set content (About, Details)
+    let contentHtml = '';
+    
+    if (metadata.about) {
+        contentHtml += `
+            <div class="user-profile-section">
+                <h4>About Me</h4>
+                <p>${escapeHtml(metadata.about)}</p>
+            </div>
+        `;
+    }
+    
+    const details = [
+        { label: 'Username', value: metadata.name },
+        { label: 'Website', value: metadata.website },
+        { label: 'NIP-05', value: metadata.nip05 },
+        { label: 'Lightning', value: metadata.lud16 }
+    ].filter(d => d.value);
+    
+    if (details.length > 0) {
+        contentHtml += `
+            <div class="user-profile-section">
+                <h4>Details</h4>
+                <div class="user-profile-details">
+                    ${details.map(d => `
+                        <div class="user-profile-detail">
+                            <span>${d.label}</span>
+                            <span>${escapeHtml(d.value)}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    }
+    
+    if (!metadata.about && details.length === 0) {
+        contentHtml = '<div class="user-profile-section"><p>No profile details found yet.</p></div>';
+    }
+    
+    content.innerHTML = contentHtml;
+    
+    // Message and Edit button logic
+    if (userKeys && pubkey === userKeys.publicKey) {
+        messageBtn.style.display = 'none';
+        
+        // Add Edit button for own profile
+        let editBtn = document.getElementById('userProfileEditBtn');
+        if (!editBtn) {
+            editBtn = document.createElement('button');
+            editBtn.id = 'userProfileEditBtn';
+            editBtn.className = 'btn btn-secondary';
+            editBtn.innerHTML = '<span class="material-symbols-rounded">edit</span> Edit Profile';
+            messageBtn.parentNode.appendChild(editBtn);
+        }
+        editBtn.style.display = 'inline-flex';
+        editBtn.onclick = () => {
+            closeUserProfile();
+            openSettings();
+        };
+    } else {
+        messageBtn.style.display = 'inline-flex';
+        messageBtn.onclick = () => {
+            closeUserProfile();
+            selectConversation(pubkey, 'user');
+        };
+        
+        // Hide Edit button if it exists
+        const editBtn = document.getElementById('userProfileEditBtn');
+        if (editBtn) editBtn.style.display = 'none';
+    }
+    
+    modal.classList.add('active');
+}
+
+// Close User Profile Modal
+function closeUserProfile() {
+    const modalOverlay = document.getElementById('userProfileModal');
+    const modalContent = modalOverlay ? modalOverlay.querySelector('.user-profile-modal') : null;
+    
+    if (modalOverlay) {
+        modalOverlay.classList.remove('active');
+        if (modalContent) {
+            // Reset transform for next open
+            setTimeout(() => {
+                modalContent.style.transform = '';
+                modalContent.style.transition = '';
+            }, 300);
+        }
+    }
+}
+
+// Close modal on click outside
+window.addEventListener('click', (event) => {
+    const userProfileModal = document.getElementById('userProfileModal');
+    if (event.target === userProfileModal) {
+        closeUserProfile();
+    }
+    
+    const settingsModal = document.getElementById('settingsModal');
+    if (event.target === settingsModal) {
+        closeSettings();
+    }
+    
+    const newChatModal = document.getElementById('newChatModal');
+    if (event.target === newChatModal) {
+        closeNewChatModal();
+    }
+});

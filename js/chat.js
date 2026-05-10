@@ -443,16 +443,37 @@ function displayConversationMessages(conversationId) {
     
     ensureProfileFetched(conversationId);
     
-    messagesContainer.innerHTML = sortedMessages.map(message => {
+    const GROUPING_THRESHOLD = 7 * 60; // 7 minutes in seconds
+    let lastMessage = null;
+    let html = '';
+
+    sortedMessages.forEach((message, index) => {
+        // Day divider logic
+        if (!lastMessage || !isSameDay(message.timestamp, lastMessage.timestamp)) {
+            html += `
+                <div class="day-divider">
+                    <div class="day-divider-line"></div>
+                    <span class="day-divider-text">${formatDateDivider(message.timestamp)}</span>
+                    <div class="day-divider-line"></div>
+                </div>
+            `;
+        }
+
+        // Grouping logic
+        const isSameSender = lastMessage && 
+            ((message.sent && lastMessage.sent) || (!message.sent && !lastMessage.sent));
+        const withinThreshold = lastMessage && (message.timestamp - lastMessage.timestamp < GROUPING_THRESHOLD);
+        const onSameDay = lastMessage && isSameDay(message.timestamp, lastMessage.timestamp);
+        const isGrouped = isSameSender && withinThreshold && onSameDay;
+
         // Format the sender identity for display
         let senderDisplayName;
         if (message.sent) {
             senderDisplayName = getDisplayNameForPubkey(userKeys.publicKey);
         } else {
-            senderDisplayName = getDisplayNameForPubkey(chatState.currentConversation);
+            senderDisplayName = getDisplayNameForPubkey(conversationId);
         }
-        const senderInitial = senderDisplayName.charAt(0).toUpperCase();
-        const senderPubkey = message.sent ? userKeys.publicKey : chatState.currentConversation;
+        const senderPubkey = message.sent ? userKeys.publicKey : conversationId;
         const avatarSVG = getAvatarMarkupForPubkey(senderPubkey, 40);
         
         // Determine message status and styling
@@ -481,21 +502,25 @@ function displayConversationMessages(conversationId) {
                     break;
             }
         }
+
+        const messageClasses = `message ${message.sent ? 'sent' : 'received'} ${statusClass} ${isGrouped ? 'grouped' : ''}`;
         
-        return `
-            <div class="message ${message.sent ? 'sent' : 'received'} ${statusClass}" 
+        html += `
+            <div class="${messageClasses}" 
                  data-message-id="${message.id}" 
                  data-message-content="${escapeHtml(message.content)}"
                  data-message-timestamp="${message.timestamp}">
-            <div class="message-avatar">
-                ${avatarSVG}
-            </div>
+                <div class="message-avatar" onclick="showUserProfile('${senderPubkey}')">
+                    ${isGrouped ? `<span class="message-hover-time">${formatShortTime(message.timestamp)}</span>` : avatarSVG}
+                </div>
                 <div class="message-content">
+                    ${!isGrouped ? `
                     <div class="message-header">
-                        <span class="message-author">${senderDisplayName}</span>
-                        <span class="message-time">${formatTimestamp(message.timestamp)}</span>
+                        <span class="message-author" onclick="showUserProfile('${senderPubkey}')">${senderDisplayName}</span>
+                        <span class="message-time">${formatMessageTimestamp(message.timestamp)}</span>
                         ${statusIndicator}
                     </div>
+                    ` : ''}
                     <div class="message-bubble">${escapeHtml(message.content)}</div>
                     <div class="message-footer">
                         ${message.incognito ? '<span class="incognito-tag">Incognito</span>' : ''}
@@ -505,7 +530,11 @@ function displayConversationMessages(conversationId) {
                 </div>
             </div>
         `;
-    }).join('');
+        
+        lastMessage = message;
+    });
+    
+    messagesContainer.innerHTML = html;
     
     // Scroll to bottom
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
@@ -584,6 +613,9 @@ function sendCurrentMessage() {
 function updateConversationsDisplay() {
     const conversationsList = document.getElementById('conversationsList');
     
+    // Sort conversations: newest first
+    chatState.conversations.sort((a, b) => (b.lastMessageTime || 0) - (a.lastMessageTime || 0));
+    
     if (chatState.conversations.length === 0) {
         conversationsList.innerHTML = `
             <div class="no-conversations">
@@ -595,61 +627,107 @@ function updateConversationsDisplay() {
         return;
     }
     
-    conversationsList.innerHTML = chatState.conversations.map(conversation => {
+    const noConversations = conversationsList.querySelector('.no-conversations');
+    if (noConversations) {
+        conversationsList.innerHTML = '';
+    }
+    
+    const existingItems = Array.from(conversationsList.querySelectorAll('.conversation-item'));
+    const existingItemsMap = new Map(existingItems.map(item => [item.dataset.conversationId, item]));
+    const newNodes = [];
+    
+    chatState.conversations.forEach((conversation) => {
         ensureProfileFetched(conversation.recipient);
         const messages = chatState.messages.get(conversation.id) || [];
         const lastMessage = messages.reduce((latest, current) => {
             if (!latest) return current;
             return current.timestamp > latest.timestamp ? current : latest;
         }, null);
-        const unreadCount = conversation.unreadCount || 0;
-        const unreadBadge = unreadCount > 0
-            ? `<div class="conversation-unread-badge">${unreadCount > 99 ? '99+' : unreadCount}</div>`
-            : '';
         
+        let unreadCount = 0;
+        if (conversation.id !== chatState.currentConversation) {
+            const readTime = conversation.lastReadTime || 0;
+            unreadCount = messages.filter(m => !m.sent && (m.timestamp * 1000 > readTime)).length;
+        }
         const displayName = getDisplayNameForPubkey(conversation.recipient);
         const avatarSVG = getAvatarMarkupForPubkey(conversation.recipient, 40);
+        const isActive = conversation.id === chatState.currentConversation;
+        const previewText = lastMessage ? lastMessage.content.substring(0, 50) : 'No messages yet';
+        const timeText = lastMessage ? formatTimestamp(lastMessage.timestamp) : '';
         
-        return `
-            <div class="conversation-item ${conversation.id === chatState.currentConversation ? 'active' : ''}" 
-                 data-conversation-id="${conversation.id}"
-                 onclick="selectConversation('${conversation.id}', 'user')">
-                <div class="conversation-avatar">
-                    ${avatarSVG}
-                </div>
+        let itemNode = existingItemsMap.get(conversation.id);
+        
+        if (!itemNode) {
+            itemNode = document.createElement('div');
+            itemNode.className = `conversation-item ${isActive ? 'active' : ''}`;
+            itemNode.dataset.conversationId = conversation.id;
+            itemNode.onclick = () => selectConversation(conversation.id, 'user');
+            
+            itemNode.innerHTML = `
+                <div class="conversation-avatar"></div>
                 <div class="conversation-info">
-                    <div class="conversation-name">${displayName}</div>
-                    <div class="conversation-preview">${lastMessage ? escapeHtml(lastMessage.content.substring(0, 50)) : 'No messages yet'}</div>
-                    <div class="conversation-time">${lastMessage ? formatTimestamp(lastMessage.timestamp) : ''}</div>
+                    <div class="conversation-name"></div>
+                    <div class="conversation-preview"></div>
+                    <div class="conversation-time"></div>
                 </div>
-                ${unreadBadge}
-            </div>
-        `;
-    }).join('');
+            `;
+            
+            addConversationContextMenu(itemNode, conversation);
+            const avatarDiv = itemNode.querySelector('.conversation-avatar');
+            avatarDiv.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                showAvatarContextMenu(e, avatarDiv);
+            });
+        } else {
+            if (isActive !== itemNode.classList.contains('active')) {
+                itemNode.classList.toggle('active', isActive);
+            }
+        }
+        
+        const avatarDiv = itemNode.querySelector('.conversation-avatar');
+        if (avatarDiv.innerHTML !== avatarSVG) avatarDiv.innerHTML = avatarSVG;
+        
+        const nameDiv = itemNode.querySelector('.conversation-name');
+        if (nameDiv.textContent !== displayName) nameDiv.textContent = displayName;
+        
+        const previewDiv = itemNode.querySelector('.conversation-preview');
+        if (previewDiv.textContent !== previewText) previewDiv.textContent = previewText;
+        
+        const timeDiv = itemNode.querySelector('.conversation-time');
+        if (timeDiv.textContent !== timeText) timeDiv.textContent = timeText;
+        
+        let badgeEl = itemNode.querySelector('.conversation-unread-badge');
+        if (unreadCount > 0) {
+            const badgeText = unreadCount > 99 ? '99+' : unreadCount.toString();
+            if (!badgeEl) {
+                itemNode.insertAdjacentHTML('beforeend', `<div class="conversation-unread-badge">${badgeText}</div>`);
+            } else if (badgeEl.textContent !== badgeText) {
+                badgeEl.textContent = badgeText;
+            }
+        } else if (badgeEl) {
+            badgeEl.remove();
+        }
+        
+        newNodes.push(itemNode);
+    });
     
-    // Add context menus to conversation items
-    const conversationElements = document.querySelectorAll('.conversation-item');
-    conversationElements.forEach((element, index) => {
-        const conversation = chatState.conversations[index];
-        if (conversation) {
-            addConversationContextMenu(element, conversation);
+    existingItems.forEach(item => {
+        if (!chatState.conversations.find(c => c.id === item.dataset.conversationId)) {
+            item.remove();
         }
     });
     
-    // Add avatar context menu listeners to conversation avatars
-    const conversationAvatars = document.querySelectorAll('.conversation-avatar');
-    conversationAvatars.forEach(avatar => {
-        avatar.addEventListener('contextmenu', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            showAvatarContextMenu(e, avatar);
-        });
+    newNodes.forEach((node, index) => {
+        if (conversationsList.children[index] !== node) {
+            conversationsList.insertBefore(node, conversationsList.children[index] || null);
+        }
     });
 }
 
 // Process incoming message for conversation
-function processIncomingMessageForConversation(event, decryptedContent) {
-    console.log('Processing incoming message for conversation:', event.pubkey);
+function processIncomingMessageForConversation(event, decryptedContent, conversationIdOverride = null) {
+    console.log('Processing incoming message for conversation:', conversationIdOverride || event.pubkey);
     try {
         const parsedPayload = JSON.parse(decryptedContent);
         const originalMessage = parsedPayload && parsedPayload.event ? parsedPayload.event : parsedPayload;
@@ -674,42 +752,21 @@ function processIncomingMessageForConversation(event, decryptedContent) {
         processedMessageIds.add(messageKey);
         
         // Find which conversation this belongs to
-        let conversationId = null;
-        let senderPubkey = null;
-        for (const [recipient, data] of incognitoState.conversations) {
-            // Check if this is a message from their conversation identity (initial messages)
-            if (data.conversationPubkey === event.pubkey) {
-                conversationId = recipient;
-                senderPubkey = recipient;
-                break;
-            }
-            // Check if this is our own outgoing message (conversation identity)
-            if (data.conversationIdentity && data.conversationIdentity.publicKey === event.pubkey) {
-                conversationId = recipient;
-                senderPubkey = recipient;
-                break;
-            }
-            // Check if this is a reply from the recipient's reply identity
-            if (data.recipientReplyIdentity && data.recipientReplyIdentity.publicKey === event.pubkey) {
-                conversationId = recipient;
-                senderPubkey = recipient;
-                break;
-            }
-        }
-        
-        // If we didn't find a conversation but we have conversations, this might be a reply from the recipient
-        if (!conversationId && incognitoState.conversations.size > 0) {
-            console.log('No exact match found in processIncomingMessageForConversation, checking if this is a reply from recipient...');
-            
-            // Look for any conversation where this could be a reply from the recipient
+        let conversationId = conversationIdOverride;
+        let senderPubkey = conversationIdOverride;
+        if (!conversationId) {
             for (const [recipient, data] of incognitoState.conversations) {
-                // If this pubkey doesn't match our conversation identity or sender identity, 
-                // and we don't have a recipientReplyIdentity yet, this might be the first reply
-                if (data.conversationPubkey !== event.pubkey && 
-                    (!data.senderIdentity || data.senderIdentity.publicKey !== event.pubkey) &&
-                    !data.recipientReplyIdentity) {
-                    
-                    console.log('Found potential recipient reply for conversation in processIncomingMessageForConversation:', recipient);
+                if (data.conversationPubkey === event.pubkey) {
+                    conversationId = recipient;
+                    senderPubkey = recipient;
+                    break;
+                }
+                if (data.conversationIdentity && data.conversationIdentity.publicKey === event.pubkey) {
+                    conversationId = recipient;
+                    senderPubkey = recipient;
+                    break;
+                }
+                if (data.recipientReplyIdentity && data.recipientReplyIdentity.publicKey === event.pubkey) {
                     conversationId = recipient;
                     senderPubkey = recipient;
                     break;

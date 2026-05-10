@@ -1,14 +1,22 @@
 // Storage management functions
 
+function getUserScopedStorageKey(baseKey) {
+    const pubkey = userKeys && userKeys.publicKey ? userKeys.publicKey : null;
+    if (!pubkey) return baseKey;
+    return `${baseKey}:${pubkey}`;
+}
+
 // Save chat state to localStorage
 function saveChatState() {
+    if (typeof window !== 'undefined' && window.__EMESSAGE_SIGNED_OUT__) return;
+    if (!userKeys) return;
     try {
         const stateToSave = {
             conversations: chatState.conversations,
             currentConversation: chatState.currentConversation,
             messages: Array.from(chatState.messages.entries())
         };
-        localStorage.setItem('chatState', JSON.stringify(stateToSave));
+        localStorage.setItem(getUserScopedStorageKey('chatState'), JSON.stringify(stateToSave));
     } catch (error) {
         console.error('Error saving chat state:', error);
     }
@@ -16,7 +24,7 @@ function saveChatState() {
 
 // Initialize chat state from localStorage
 function initializeChatState() {
-    const stored = localStorage.getItem('chatState');
+    const stored = localStorage.getItem(getUserScopedStorageKey('chatState'));
     if (stored) {
         try {
             const parsed = JSON.parse(stored);
@@ -86,8 +94,10 @@ function initializeChatState() {
 
 // Save profile metadata to localStorage
 function saveProfileState() {
+    if (typeof window !== 'undefined' && window.__EMESSAGE_SIGNED_OUT__) return;
+    if (!userKeys) return;
     try {
-        localStorage.setItem('profileState', JSON.stringify(profileState));
+        localStorage.setItem(getUserScopedStorageKey('profileState'), JSON.stringify(profileState));
     } catch (error) {
         console.error('Error saving profile state:', error);
     }
@@ -96,7 +106,7 @@ function saveProfileState() {
 // Load profile metadata from localStorage
 function loadProfileState() {
     try {
-        const stored = localStorage.getItem('profileState');
+        const stored = localStorage.getItem(getUserScopedStorageKey('profileState'));
         if (stored) {
             const parsed = JSON.parse(stored);
             profileState.metadata = parsed.metadata || null;
@@ -124,12 +134,14 @@ function loadProfileState() {
 
 // Save profile cache to localStorage
 function saveProfileCache() {
+    if (typeof window !== 'undefined' && window.__EMESSAGE_SIGNED_OUT__) return;
+    if (!userKeys) return;
     try {
         const cacheObj = {};
         profileCache.forEach((value, key) => {
             cacheObj[key] = value;
         });
-        localStorage.setItem('profileCache', JSON.stringify(cacheObj));
+        localStorage.setItem(getUserScopedStorageKey('profileCache'), JSON.stringify(cacheObj));
     } catch (error) {
         console.error('Error saving profile cache:', error);
     }
@@ -138,7 +150,7 @@ function saveProfileCache() {
 // Load profile cache from localStorage
 function loadProfileCache() {
     try {
-        const stored = localStorage.getItem('profileCache');
+        const stored = localStorage.getItem(getUserScopedStorageKey('profileCache'));
         if (stored) {
             const parsed = JSON.parse(stored);
             profileCache = new Map(Object.entries(parsed || {}));
@@ -150,8 +162,9 @@ function loadProfileCache() {
 
 // Save relay settings to localStorage
 function saveRelaySettings() {
+    if (typeof window !== 'undefined' && window.__EMESSAGE_SIGNED_OUT__) return;
     try {
-        localStorage.setItem('relaySettings', JSON.stringify(relaySettings));
+        localStorage.setItem(getUserScopedStorageKey('relaySettings'), JSON.stringify(relaySettings));
     } catch (error) {
         console.error('Error saving relay settings:', error);
     }
@@ -160,7 +173,7 @@ function saveRelaySettings() {
 // Load relay settings from localStorage
 function loadRelaySettings() {
     try {
-        const stored = localStorage.getItem('relaySettings');
+        const stored = localStorage.getItem(getUserScopedStorageKey('relaySettings'));
         if (stored) {
             const parsed = JSON.parse(stored);
             if (parsed && Array.isArray(parsed.relays)) {
@@ -188,6 +201,8 @@ function loadRelaySettings() {
 
 // Save incognito state to localStorage
 function saveIncognitoState() {
+    if (typeof window !== 'undefined' && window.__EMESSAGE_SIGNED_OUT__) return;
+    if (!userKeys) return;
     try {
         // Convert conversations to serializable format
         const conversationsObj = {};
@@ -220,7 +235,7 @@ function saveIncognitoState() {
             console.log('- conversationPubkey:', value.conversationPubkey ? value.conversationPubkey.substring(0, 16) + '...' : 'none');
         }
         
-        localStorage.setItem('incognitoState', JSON.stringify(data));
+        localStorage.setItem(getUserScopedStorageKey('incognitoState'), JSON.stringify(data));
         if (typeof scheduleIncognitoBackup === 'function') {
             scheduleIncognitoBackup();
         }
@@ -233,7 +248,7 @@ function saveIncognitoState() {
 function initializeIncognitoState() {
     try {
         // Load existing state from localStorage
-        const stored = localStorage.getItem('incognitoState');
+        const stored = localStorage.getItem(getUserScopedStorageKey('incognitoState'));
         if (stored) {
             const data = JSON.parse(stored);
             incognitoState.seed = data.seed;
@@ -287,7 +302,7 @@ function initializeIncognitoState() {
 // Load stored messages (legacy system)
 function loadStoredMessages() {
     try {
-        const stored = localStorage.getItem('receivedMessages');
+        const stored = localStorage.getItem(getUserScopedStorageKey('receivedMessages'));
         if (stored) {
             receivedMessages = JSON.parse(stored);
             updateMessagesDisplay();
@@ -300,8 +315,10 @@ function loadStoredMessages() {
 
 // Save messages to localStorage (legacy system)
 function saveMessages() {
+    if (typeof window !== 'undefined' && window.__EMESSAGE_SIGNED_OUT__) return;
+    if (!userKeys) return;
     try {
-        localStorage.setItem('receivedMessages', JSON.stringify(receivedMessages));
+        localStorage.setItem(getUserScopedStorageKey('receivedMessages'), JSON.stringify(receivedMessages));
     } catch (error) {
         console.error('Error saving messages:', error);
     }
@@ -310,13 +327,29 @@ function saveMessages() {
 // Clear all storage
 function clearStorage() {
     // Clear all stored data
-    localStorage.removeItem('nostrKeys');
-    localStorage.removeItem('receivedMessages');
-    localStorage.removeItem('incognitoState');
-    localStorage.removeItem('chatState');
-    localStorage.removeItem('profileState');
-    localStorage.removeItem('profileCache');
-    localStorage.removeItem('relaySettings');
+    const baseKeys = [
+        'nostrKeys',
+        'receivedMessages',
+        'incognitoState',
+        'chatState',
+        'profileState',
+        'profileCache',
+        'relaySettings'
+    ];
+    baseKeys.forEach((key) => {
+        localStorage.removeItem(key);
+    });
+
+    for (let i = localStorage.length - 1; i >= 0; i -= 1) {
+        const key = localStorage.key(i);
+        if (!key) continue;
+        for (const base of baseKeys) {
+            if (key === base || key.startsWith(`${base}:`)) {
+                localStorage.removeItem(key);
+                break;
+            }
+        }
+    }
     
     // Clear in-memory data
     receivedMessages = [];

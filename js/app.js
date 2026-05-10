@@ -64,6 +64,11 @@ function bootstrapApp() {
     }
 
     syncResponsiveLayout();
+    
+    // Initialize mobile gestures
+    if (typeof initGestures === 'function') {
+        initGestures();
+    }
 }
 
 // Initialize the app shell
@@ -75,6 +80,23 @@ document.addEventListener('DOMContentLoaded', function() {
     testNip44();
     initializeAuthFlow();
     window.addEventListener('resize', syncResponsiveLayout);
+
+    // Auto-resize message input
+    const messageInput = document.getElementById('messageInput');
+    if (messageInput) {
+        messageInput.addEventListener('input', function() {
+            this.style.height = '48px';
+            this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+            
+            // Sync context menu and handles if open
+            if (window.__currentEditableEl === this && window.innerWidth <= 900) {
+                if (typeof updateSelectionHandles === 'function') updateSelectionHandles(this);
+                if (typeof _repositionBarForSelection === 'function' && window.contextMenu && window.contextMenu.classList.contains('horizontal')) {
+                    _repositionBarForSelection(this);
+                }
+            }
+        });
+    }
 });
 
 // Legacy gift wrap functions (kept for compatibility)

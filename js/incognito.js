@@ -692,8 +692,8 @@ function acceptIncognitoInvitation(senderPubkey) {
         const conversationIndex = Number.isFinite(invitation.conversationCounter)
             ? invitation.conversationCounter
             : 0;
-        const ourSenderIdentity = generateDisposableIdentity(userKeys.publicKey, 0, conversationIndex); // Our identity for sending replies
-        const ourConversationIdentity = generateDisposableIdentity(userKeys.publicKey, 1, conversationIndex); // Our identity for receiving messages
+        const ourSenderIdentity = generateDisposableIdentity(senderPubkey, 0, conversationIndex); // Our identity for sending replies
+        const ourConversationIdentity = generateDisposableIdentity(senderPubkey, 1, conversationIndex); // Our identity for receiving messages
         
         // Store conversation data 
         const conversationData = {
@@ -803,29 +803,6 @@ async function handleIncognitoMessage(event) {
             }
         }
         
-        // If we didn't find a conversation but we have conversations, this might be a reply from the recipient
-        if (!senderPubkey && incognitoState.conversations.size > 0) {
-            console.log('No exact match found, checking if this is a reply from recipient...');
-            
-            // Look for any conversation where this could be a reply from the recipient
-            for (const [recipient, data] of incognitoState.conversations) {
-                // If this pubkey doesn't match our conversation identity or sender identity, 
-                // and we don't have a recipientReplyIdentity yet, this might be the first reply
-                if (data.conversationPubkey !== event.pubkey && 
-                    (!data.senderIdentity || data.senderIdentity.publicKey !== event.pubkey) &&
-                    !data.recipientReplyIdentity) {
-                    
-                    console.log('Found potential recipient reply for conversation:', recipient);
-                    console.log('- Our conversation identity:', data.conversationPubkey);
-                    console.log('- Our sender identity:', data.senderIdentity?.publicKey);
-                    console.log('- Event pubkey (recipient reply):', event.pubkey);
-                    senderPubkey = recipient;
-                    conversationData = data;
-                    break;
-                }
-            }
-        }
-        
         let decryptedContentFromLookup = null;
         if (!senderPubkey) {
             try {
@@ -834,13 +811,13 @@ async function handleIncognitoMessage(event) {
                     const payload = JSON.parse(fallbackDecrypted);
                     const originalMessage = payload && payload.event ? payload.event : payload;
                     if (originalMessage && originalMessage.pubkey) {
+                        senderPubkey = originalMessage.pubkey;
                         const candidate = incognitoState.conversations.get(originalMessage.pubkey);
                         if (candidate) {
-                            senderPubkey = originalMessage.pubkey;
                             conversationData = candidate;
-                            decryptedContentFromLookup = fallbackDecrypted;
-                            console.log('Resolved conversation by decrypted sender pubkey:', senderPubkey);
                         }
+                        decryptedContentFromLookup = fallbackDecrypted;
+                        console.log('Resolved sender pubkey by decrypted payload:', senderPubkey);
                     }
                 }
             } catch (error) {
@@ -855,7 +832,7 @@ async function handleIncognitoMessage(event) {
             return;
         }
         
-        if (!senderPubkey || !conversationData) {
+        if (!senderPubkey || (!conversationData && !decryptedContentFromLookup)) {
             // Check if this might be a message that arrived before invitation processing
             // Store it temporarily and retry later
             addPendingMessage(event);
@@ -869,7 +846,7 @@ async function handleIncognitoMessage(event) {
         }
         
         // If this is a reply from the recipient's sender identity, update our conversation data
-        if (conversationData.conversationPubkey !== event.pubkey && !conversationData.recipientReplyIdentity) {
+        if (conversationData && conversationData.conversationPubkey !== event.pubkey && !conversationData.recipientReplyIdentity) {
             // This is likely a reply from the recipient - store their reply identity
             conversationData.recipientReplyIdentity = {
                 publicKey: event.pubkey
@@ -884,7 +861,7 @@ async function handleIncognitoMessage(event) {
         try {
             if (decryptedContentFromLookup) {
                 decryptedContent = decryptedContentFromLookup;
-            } else if (conversationData.conversationIdentity && conversationData.conversationIdentity.publicKey === event.pubkey) {
+            } else if (conversationData && conversationData.conversationIdentity && conversationData.conversationIdentity.publicKey === event.pubkey) {
                 decryptedContent = await decryptGiftWrapContentForOutgoing(
                     event.content,
                     conversationData.recipient,
@@ -930,7 +907,7 @@ async function handleIncognitoMessage(event) {
                 }
                 
                 // Process message for conversation interface ONLY
-                processIncomingMessageForConversation(event, decryptedContent);
+                processIncomingMessageForConversation(event, decryptedContent, senderPubkey);
                 
                 // Don't add to legacy system to avoid duplication
                 
