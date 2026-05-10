@@ -117,9 +117,14 @@ function signOut() {
     }
 
     try {
+<<<<<<< HEAD
         localStorage.removeItem('nostrKeys');
 
         const legacyUnscopedKeys = new Set([
+=======
+        const knownKeys = new Set([
+            'nostrKeys',
+>>>>>>> 7bb2c38b53fbf0252ce99b06870cc2467a03bd99
             'receivedMessages',
             'incognitoState',
             'chatState',
@@ -131,7 +136,15 @@ function signOut() {
         for (let i = localStorage.length - 1; i >= 0; i -= 1) {
             const key = localStorage.key(i);
             if (!key) continue;
+<<<<<<< HEAD
             if (legacyUnscopedKeys.has(key)) {
+=======
+            if (knownKeys.has(key)) {
+                localStorage.removeItem(key);
+                continue;
+            }
+            if (/^(nostrKeys|receivedMessages|incognitoState|chatState|profileState|profileCache|relaySettings)$/.test(key)) {
+>>>>>>> 7bb2c38b53fbf0252ce99b06870cc2467a03bd99
                 localStorage.removeItem(key);
             }
         }

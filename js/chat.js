@@ -473,6 +473,10 @@ function displayConversationMessages(conversationId) {
         } else {
             senderDisplayName = getDisplayNameForPubkey(conversationId);
         }
+<<<<<<< HEAD
+=======
+        const senderInitial = senderDisplayName.charAt(0).toUpperCase();
+>>>>>>> 7bb2c38b53fbf0252ce99b06870cc2467a03bd99
         const senderPubkey = message.sent ? userKeys.publicKey : conversationId;
         const avatarSVG = getAvatarMarkupForPubkey(senderPubkey, 40);
         
@@ -727,7 +731,11 @@ function updateConversationsDisplay() {
 
 // Process incoming message for conversation
 function processIncomingMessageForConversation(event, decryptedContent, conversationIdOverride = null) {
+<<<<<<< HEAD
     console.log('Processing incoming message for conversation:', conversationIdOverride || event.pubkey);
+=======
+    console.log('Processing incoming message for conversation:', event.pubkey);
+>>>>>>> 7bb2c38b53fbf0252ce99b06870cc2467a03bd99
     try {
         const parsedPayload = JSON.parse(decryptedContent);
         const originalMessage = parsedPayload && parsedPayload.event ? parsedPayload.event : parsedPayload;
