@@ -83,14 +83,24 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Setup visual viewport handling for mobile keyboards
     let lastVh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+    let isScrolledToBottom = true;
+    
+    const messagesContainer = document.getElementById('messagesContainer');
+    if (messagesContainer) {
+        messagesContainer.addEventListener('scroll', () => {
+            isScrolledToBottom = Math.abs(messagesContainer.scrollHeight - messagesContainer.scrollTop - messagesContainer.clientHeight) < 50;
+        });
+    }
+
     function updateAppHeight() {
         const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
         document.documentElement.style.setProperty('--app-height', `${vh}px`);
         
-        const messagesContainer = document.getElementById('messagesContainer');
         if (messagesContainer && vh < lastVh) {
-            // When viewport shrinks (keyboard opens), scroll to bottom
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            // When viewport shrinks (keyboard opens), scroll to bottom ONLY if already near bottom
+            if (isScrolledToBottom) {
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            }
         }
         lastVh = vh;
     }
