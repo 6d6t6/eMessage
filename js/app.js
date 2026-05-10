@@ -82,12 +82,17 @@ document.addEventListener('DOMContentLoaded', function() {
     window.addEventListener('resize', syncResponsiveLayout);
 
     // Setup visual viewport handling for mobile keyboards
+    let lastVh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
     function updateAppHeight() {
         const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
         document.documentElement.style.setProperty('--app-height', `${vh}px`);
-        if (typeof scrollToBottom === 'function') {
-            scrollToBottom();
+        
+        const messagesContainer = document.getElementById('messagesContainer');
+        if (messagesContainer && vh < lastVh) {
+            // When viewport shrinks (keyboard opens), scroll to bottom
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
+        lastVh = vh;
     }
     updateAppHeight();
     if (window.visualViewport) {

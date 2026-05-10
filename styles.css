@@ -1231,6 +1231,11 @@ body {
     flex-direction: column;
 }
 
+.messages-container::before {
+    content: '';
+    margin-top: auto;
+}
+
 .message {
     display: flex;
     align-items: flex-start;
