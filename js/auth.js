@@ -17,22 +17,6 @@ function initializeAuthFlow() {
         setAuthView(false);
         showAuthStep('signin');
     }
-
-    // Hide splash screen after a short delay to ensure initial render is smooth
-    setTimeout(hideSplashScreen, 800);
-}
-
-function hideSplashScreen() {
-    const splash = document.getElementById('splashScreen');
-    if (splash) {
-        splash.classList.add('hidden');
-        // Remove from DOM after transition completes to save resources
-        setTimeout(() => {
-            if (splash.parentNode) {
-                splash.parentNode.removeChild(splash);
-            }
-        }, 600);
-    }
 }
 
 function setAuthView(isAuthenticated) {

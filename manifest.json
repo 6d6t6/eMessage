@@ -4,10 +4,17 @@
   "description": "Private, reliable messaging with your keys.",
   "start_url": "/",
   "display": "standalone",
+  "display_override": [
+    "standalone",
+    "minimal-ui"
+  ],
   "orientation": "portrait",
-  "background_color": "#1a1a1a",
-  "theme_color": "#1a1a1a",
-  "categories": ["social", "communication"],
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "categories": [
+    "social",
+    "communication"
+  ],
   "icons": [
     {
       "src": "/assets/icon-192.png",
@@ -28,14 +35,26 @@
       "short_name": "New",
       "description": "Start a new conversation",
       "url": "/?action=new",
-      "icons": [{ "src": "/assets/icon-plus-512.png", "sizes": "512x512", "type": "image/png" }]
+      "icons": [
+        {
+          "src": "/assets/icon-plus-512.png",
+          "sizes": "512x512",
+          "type": "image/png"
+        }
+      ]
     },
     {
-      "name": "My Account",
-      "short_name": "Account",
-      "description": "View your profile and settings",
-      "url": "/?action=account",
-      "icons": [{ "src": "/assets/icon-account-512.png", "sizes": "512x512", "type": "image/png" }]
+      "name": "My Profile",
+      "short_name": "Profile",
+      "description": "View your profile",
+      "url": "/?action=me",
+      "icons": [
+        {
+          "src": "/assets/icon-account-512.png",
+          "sizes": "512x512",
+          "type": "image/png"
+        }
+      ]
     }
   ]
 }
