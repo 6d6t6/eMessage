@@ -367,10 +367,12 @@ body {
     justify-content: space-between;
     align-items: center;
     padding: 20px;
+    padding-top: calc(20px + env(safe-area-inset-top));
     background: var(--bg-primary);
     box-shadow: 0 1px 0px 0px #2a2a2a;
     z-index: 60;
-    height: 64px;
+    height: auto;
+    min-height: calc(64px + env(safe-area-inset-top));
     position: fixed;
     top: 0;
     left: var(--sidebar-width);
@@ -742,15 +744,17 @@ body {
 /* Conversations Sidebar */
 .conversations-sidebar {
     width: 300px;
-    background: #1a1a1a;
+    background: var(--bg-primary);
     border-right: 1px solid #2a2a2a;
     display: flex;
     flex-direction: column;
 }
 
 .conversations-header {
-    height: 64px;
+    height: auto;
+    min-height: calc(64px + env(safe-area-inset-top));
     padding: 20px;
+    padding-top: calc(20px + env(safe-area-inset-top));
     box-shadow: 0 1px 0px 0px #2a2a2a;
     z-index: 10;
     display: flex;
