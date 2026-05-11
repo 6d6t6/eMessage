@@ -96,7 +96,7 @@
 
 body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-    background: var(--bg-primary);
+    background: var(--bg-secondary);
     color: #ffffff;
     line-height: 1.6;
     overflow: hidden;
