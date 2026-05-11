@@ -42,7 +42,7 @@ const BottomSheetGestures = (function() {
             element.style.willChange = 'transform';
             if (overlay) {
                 overlay.style.transition = 'none';
-                overlay.style.willChange = 'opacity';
+                overlay.style.willChange = 'background-color';
             }
         }, { passive: true });
 
@@ -62,9 +62,9 @@ const BottomSheetGestures = (function() {
             element.style.transform = `translateY(${deltaY}px)`;
             
             if (overlay) {
-                // Subtle dimming: fade from 1.0 to 0.6 as we drag
+                // Subtle dimming: fade background from 0.5 to 0.3 as we drag
                 const progress = Math.min(deltaY / (element.offsetHeight || 400), 1);
-                overlay.style.opacity = (1 - progress * 0.4).toString();
+                overlay.style.backgroundColor = `rgba(0, 0, 0, ${0.5 * (1 - progress * 0.4)})`;
             }
         }
 
@@ -96,8 +96,8 @@ const BottomSheetGestures = (function() {
             element.style.transform = 'translateY(100%)';
             
             if (overlay) {
-                overlay.style.transition = `opacity ${ANIMATION_DURATION}ms ease`;
-                overlay.style.opacity = '0';
+                overlay.style.transition = `background ${ANIMATION_DURATION}ms ease`;
+                overlay.style.backgroundColor = 'rgba(0, 0, 0, 0)';
             }
 
             setTimeout(() => {
@@ -119,8 +119,8 @@ const BottomSheetGestures = (function() {
             element.style.transform = 'translateY(0)';
             
             if (overlay) {
-                overlay.style.transition = `opacity ${ANIMATION_DURATION}ms ease`;
-                overlay.style.opacity = '1';
+                overlay.style.transition = `background ${ANIMATION_DURATION}ms ease`;
+                overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
             }
 
             // Clear inline styles after snap-back so they don't override CSS classes
@@ -136,7 +136,7 @@ const BottomSheetGestures = (function() {
             element.style.transition = '';
             element.style.willChange = '';
             if (overlay) {
-                overlay.style.opacity = '';
+                overlay.style.backgroundColor = '';
                 overlay.style.transition = '';
                 overlay.style.willChange = '';
             }

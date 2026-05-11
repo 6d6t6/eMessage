@@ -141,7 +141,12 @@ function copyToClipboard(elementId) {
     const element = document.getElementById(elementId);
     if (!element) return;
     
-    const textToCopy = element.querySelector('span') ? element.querySelector('span').textContent : element.textContent;
+    let textToCopy;
+    if (element.hasAttribute('data-full-text')) {
+        textToCopy = element.getAttribute('data-full-text');
+    } else {
+        textToCopy = element.querySelector('span') ? element.querySelector('span').textContent : element.textContent;
+    }
     
     if (navigator.clipboard) {
         navigator.clipboard.writeText(textToCopy).then(() => {

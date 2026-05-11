@@ -1,5 +1,5 @@
 // UI functions and status management
-
+let profilePanelTransitionToken = 0;
 
 // Show notification to user
 function showNotification(message, type = 'info') {
@@ -273,8 +273,17 @@ function toggleProfilePanel() {
     const chatArea = document.querySelector('.chat-area');
     const isMobile = window.innerWidth <= 900;
     if (!panel) return;
+
+    // Increment token to cancel any pending transitions
+    const currentToken = ++profilePanelTransitionToken;
+    
     const isActive = panel.classList.contains('active');
     if (isActive) {
+        if (isMobile && chatArea) {
+            chatArea.style.display = 'flex';
+            // Force a reflow to ensure the transition from the current transform (-10%) works
+            chatArea.offsetHeight;
+        }
         panel.classList.remove('active');
         if (typeof setPanelAccessibility === 'function') {
             setPanelAccessibility(panel, false);
@@ -283,7 +292,6 @@ function toggleProfilePanel() {
             chatInterface.classList.remove('profile-panel-open');
         }
         if (isMobile && chatArea) {
-            chatArea.style.display = 'flex';
             if (typeof setPanelAccessibility === 'function') {
                 setPanelAccessibility(chatArea, true);
             }
@@ -298,7 +306,11 @@ function toggleProfilePanel() {
         }
         if (isMobile && chatArea) {
             const handleFadeEnd = (event) => {
-                if (event.propertyName !== 'opacity') return;
+                // Check both transform and opacity just in case
+                if (event.propertyName !== 'transform' && event.propertyName !== 'opacity') return;
+                // If token changed, this is a stale animation
+                if (currentToken !== profilePanelTransitionToken) return;
+                
                 chatArea.style.display = 'none';
                 if (typeof setPanelAccessibility === 'function') {
                     setPanelAccessibility(chatArea, false);
@@ -306,6 +318,8 @@ function toggleProfilePanel() {
             };
             chatArea.addEventListener('transitionend', handleFadeEnd, { once: true });
             setTimeout(() => {
+                if (currentToken !== profilePanelTransitionToken) return;
+                
                 chatArea.style.display = 'none';
                 if (typeof setPanelAccessibility === 'function') {
                     setPanelAccessibility(chatArea, false);
@@ -989,9 +1003,12 @@ function showUserProfile(pubkey) {
     // Set basic info
     name.textContent = displayName;
     try {
-        npub.textContent = window.NostrTools.nip19.npubEncode(pubkey);
+        const fullNpub = window.NostrTools.nip19.npubEncode(pubkey);
+        npub.textContent = formatPubkeyForDisplay(pubkey);
+        npub.setAttribute('data-full-text', fullNpub);
     } catch (e) {
-        npub.textContent = pubkey;
+        npub.textContent = formatPubkey(pubkey);
+        npub.setAttribute('data-full-text', pubkey);
     }
     
     // Set content (About, Details)
