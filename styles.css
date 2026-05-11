@@ -46,8 +46,13 @@
     --sidebar-width: 300px;
 
     /* Font family */
-    --font-default: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-default: 'Inter', 'Twemoji', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     --font-monospace: 'JetBrains Mono', 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+}
+
+@font-face {
+    font-family: 'Twemoji';
+    src: url("https://unpkg.com/@sableclient/twemoji-font/dist/files/twemoji.woff2") format("woff2");
 }
 
 * {
@@ -95,7 +100,7 @@
 }
 
 body {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    font-family: var(--font-default);
     background: var(--bg-secondary);
     color: #ffffff;
     line-height: 1.6;
@@ -1502,7 +1507,7 @@ body {
     border: none;
     color: #ffffff;
     font-size: 14px;
-    padding-inline: 20px;
+    padding-inline: 4px 6px;
     padding-top: 14px;
     padding-bottom: 12px;
     line-height: 1.5;
@@ -1545,6 +1550,276 @@ body {
     transform: none;
 }
 
+/* Emoji trigger button (inside input wrapper) */
+.emoji-trigger-btn {
+    width: 36px;
+    height: 36px;
+    background: none;
+    border: none;
+    border-radius: 6px;
+    color: #6b7280;
+    font-size: 20px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-bottom: 6px;
+    transition: color 0.15s ease;
+}
+.emoji-trigger-btn:hover {
+    color: #fbbf24;
+}
+.emoji-trigger-btn .material-symbols-rounded {
+    font-size: 22px;
+}
+
+/* ── Emoji Picker ──────────────────────────────────────────────── */
+#emojiPicker {
+    position: fixed;
+    z-index: 9999;
+    width: 352px;
+    height: 452px;
+    background: #1e1e1e;
+    border: 1px solid #2a2a2a;
+    border-radius: 14px;
+    box-shadow: 0 16px 48px rgba(0,0,0,0.55);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    font-family: var(--font-default);
+    opacity: 0;
+    visibility: hidden;
+    transform: scale(0.94) translateY(8px);
+    transform-origin: bottom right;
+    pointer-events: none;
+    transition: opacity 0.15s ease, transform 0.15s ease, visibility 0s linear 0.15s;
+}
+#emojiPicker.visible {
+    opacity: 1;
+    visibility: visible;
+    transform: scale(1) translateY(0);
+    pointer-events: auto;
+    transition: opacity 0.15s ease, transform 0.15s ease, visibility 0s linear 0s;
+}
+
+/* Search bar */
+.ep-search-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px 8px;
+    border-bottom: 1px solid #2a2a2a;
+    flex-shrink: 0;
+}
+.ep-search-icon {
+    font-size: 18px;
+    color: #6b7280;
+    flex-shrink: 0;
+}
+.ep-search {
+    flex: 1;
+    background: #2a2a2a;
+    border: none;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 13px;
+    padding: 6px 10px;
+    outline: none;
+    font-family: var(--font-default);
+}
+.ep-search::placeholder { color: #6b7280; }
+.ep-search:focus { box-shadow: 0 0 0 2px rgba(59,130,246,0.35); }
+
+/* Category row */
+.ep-categories {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 6px 8px;
+    border-bottom: 1px solid #2a2a2a;
+    flex-shrink: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+.ep-categories::-webkit-scrollbar { display: none; }
+.ep-cat-btn {
+    width: 34px;
+    height: 30px;
+    background: none;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.5;
+    transition: opacity 0.12s, background 0.12s;
+    flex-shrink: 0;
+    font-family: var(--font-default);
+}
+.ep-cat-btn:hover {
+    opacity: 1;
+    background: #2a2a2a;
+}
+.ep-cat-btn.active {
+    opacity: 1;
+    background: rgba(59,130,246,0.18);
+}
+
+/* Emoji grid */
+.ep-grid-wrap {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+}
+.ep-grid {
+    display: grid;
+    grid-template-columns: repeat(9, 1fr);
+    gap: 2px;
+    padding: 6px 8px;
+    overflow-y: auto;
+    height: 100%;
+    scrollbar-width: thin;
+    scrollbar-color: #404040 transparent;
+}
+.ep-grid::-webkit-scrollbar { width: 4px; }
+.ep-grid::-webkit-scrollbar-track { background: transparent; }
+.ep-grid::-webkit-scrollbar-thumb { background: #404040; border-radius: 4px; }
+.ep-emoji-btn {
+    width: 34px;
+    height: 34px;
+    background: none;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.1s;
+    line-height: 1;
+    font-family: var(--font-default);
+}
+.ep-emoji-btn:hover {
+    background: #2a2a2a;
+    transform: scale(1.2);
+}
+.ep-empty {
+    grid-column: 1 / -1;
+    text-align: center;
+    color: #6b7280;
+    font-size: 13px;
+    padding: 32px 0;
+}
+
+/* Footer preview */
+.ep-footer {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px 8px;
+    border-top: 1px solid #2a2a2a;
+    min-height: 36px;
+    flex-shrink: 0;
+}
+.ep-preview-emoji {
+    font-size: 22px;
+    font-family: var(--font-default);
+    line-height: 1;
+    flex-shrink: 0;
+}
+.ep-preview-name {
+    flex: 1;
+    font-size: 11px;
+    color: #9ca3af;
+    font-family: var(--font-monospace);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.ep-skin-btn {
+    background: none;
+    border: 1px solid #3a3a3a;
+    border-radius: 6px;
+    padding: 2px 6px;
+    font-size: 18px;
+    cursor: pointer;
+    font-family: var(--font-default);
+    line-height: 1.2;
+    color: #fff;
+    flex-shrink: 0;
+    transition: border-color 0.12s, background 0.12s;
+}
+.ep-skin-btn:hover {
+    border-color: #555;
+    background: #2a2a2a;
+}
+
+/* Skin-tone variant indicator (tiny dot on bottom-right of emoji btn) */
+.ep-emoji-btn.has-variants {
+    position: relative;
+}
+.ep-emoji-btn.has-variants::after {
+    content: '';
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: #6b7280;
+    pointer-events: none;
+}
+
+/* ── Skin-tone popover ─────────────────────────────────── */
+#emojiTonePopover {
+    position: fixed;
+    z-index: 10000;
+    display: flex;
+    gap: 2px;
+    padding: 4px;
+    background: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(4px) scale(0.95);
+    transform-origin: bottom center;
+    transition: opacity 0.12s ease, transform 0.12s ease, visibility 0s linear 0.12s;
+}
+#emojiTonePopover.visible {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0) scale(1);
+    transition: opacity 0.12s ease, transform 0.12s ease, visibility 0s;
+}
+.ep-tone-btn {
+    width: 36px;
+    height: 36px;
+    background: none;
+    border: none;
+    border-radius: 8px;
+    font-size: 22px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-default);
+    transition: background 0.1s, transform 0.1s;
+}
+.ep-tone-btn:hover {
+    background: #2a2a2a;
+    transform: scale(1.15);
+}
+.ep-tone-btn.active {
+    background: rgba(59,130,246,0.25);
+    box-shadow: 0 0 0 2px rgba(59,130,246,0.5);
+}
+
+
 /* Modal */
 .modal-overlay {
     position: fixed;
@@ -1565,6 +1840,7 @@ body {
 .modal-overlay.active {
     opacity: 1;
     visibility: visible;
+    transition: opacity 0.3s ease, visibility 0s;
 }
 
 .modal {
@@ -3383,7 +3659,17 @@ body.context-menu-open .sel-handle {
     box-shadow: var(--shadow-lg);
     display: flex;
     flex-direction: column;
-    animation: modalSlideUp 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+    /* Animation is applied only when opening (via active parent) so it re-fires on every open */
+    opacity: 0;
+    transform: translateY(20px);
+    /* Default state: invisible, translated down — matches keyframe start */
+}
+
+/* Desktop: animate in when the overlay becomes active */
+@media (min-width: 901px) {
+    #userProfileModal.active .user-profile-modal {
+        animation: modalSlideUp 0.28s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards;
+    }
 }
 
 @keyframes modalSlideUp {

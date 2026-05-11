@@ -687,12 +687,13 @@ function updateConversationsDisplay() {
         
         const avatarDiv = itemNode.querySelector('.conversation-avatar');
         if (avatarDiv.innerHTML !== avatarSVG) avatarDiv.innerHTML = avatarSVG;
-        
+
         const nameDiv = itemNode.querySelector('.conversation-name');
-        if (nameDiv.textContent !== displayName) nameDiv.textContent = displayName;
-        
+        if (nameDiv.textContent !== replaceShortcodes(displayName)) setTextWithEmoji(nameDiv, displayName);
+
         const previewDiv = itemNode.querySelector('.conversation-preview');
-        if (previewDiv.textContent !== previewText) previewDiv.textContent = previewText;
+        const previewWithEmoji = replaceShortcodes(previewText);
+        if (previewDiv.textContent !== previewWithEmoji) setTextWithEmoji(previewDiv, previewText);
         
         const timeDiv = itemNode.querySelector('.conversation-time');
         if (timeDiv.textContent !== timeText) timeDiv.textContent = timeText;

@@ -127,6 +127,27 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+
+    // Wire up emoji picker for chat input
+    const chatEmojiBtn = document.getElementById('chatEmojiBtn');
+    if (chatEmojiBtn && messageInput) {
+        chatEmojiBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            toggleEmojiPicker(chatEmojiBtn, (emoji) => {
+                const start = messageInput.selectionStart ?? messageInput.value.length;
+                const end = messageInput.selectionEnd ?? messageInput.value.length;
+                const before = messageInput.value.slice(0, start);
+                const after = messageInput.value.slice(end);
+                messageInput.value = before + emoji + after;
+                const newPos = start + emoji.length;
+                messageInput.setSelectionRange(newPos, newPos);
+                messageInput.focus();
+                // Trigger resize
+                messageInput.style.height = '48px';
+                messageInput.style.height = Math.min(messageInput.scrollHeight, 120) + 'px';
+            });
+        });
+    }
 });
 
 // Legacy gift wrap functions (kept for compatibility)

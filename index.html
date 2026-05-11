@@ -216,6 +216,9 @@
 
                         <div class="message-input-container" id="messageInputContainer" style="display: none;">
                             <div class="input-wrapper">
+                                <button class="emoji-trigger-btn" id="chatEmojiBtn" title="Emoji" aria-label="Open emoji picker" type="button">
+                                    <span class="material-symbols-rounded">sentiment_satisfied</span>
+                                </button>
                                 <textarea id="messageInput" placeholder="Type your message..."
                                     onkeydown="handleMessageKeydown(event)" rows="1"></textarea>
                                 <button class="send-btn" onclick="sendCurrentMessage()">
@@ -684,6 +687,8 @@
 
     <!-- Load modular JavaScript files in dependency order -->
     <script src="js/config.js"></script>
+    <script src="js/emoji-map.js"></script>
+    <script src="js/emoji.js"></script>
     <script src="js/avatar.js"></script>
     <script src="js/utils.js"></script>
     <script src="js/storage.js"></script>

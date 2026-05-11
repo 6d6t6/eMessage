@@ -123,7 +123,7 @@ function updateStatus() {
 
     const profileName = document.querySelector('.profile-name');
     if (profileName && userKeys) {
-        profileName.textContent = getDisplayNameForPubkey(userKeys.publicKey) || 'Your Profile';
+        setTextWithEmoji(profileName, getDisplayNameForPubkey(userKeys.publicKey) || 'Your Profile');
     }
     
     // Update messages count
@@ -418,11 +418,11 @@ function updateChatHeaderProfile() {
     if (!chatTitle) return;
     const conversationId = chatState.currentConversation;
     if (!conversationId) {
-        chatTitle.textContent = 'Select a conversation';
+        setTextWithEmoji(chatTitle, 'Select a conversation');
         return;
     }
     const displayName = getDisplayNameForPubkey(conversationId);
-    chatTitle.textContent = displayName;
+    setTextWithEmoji(chatTitle, displayName);
 }
 
 function renderProfilePanel() {
@@ -992,6 +992,15 @@ function showUserProfile(pubkey) {
     
     if (!modal || !banner || !avatar || !name || !npub || !content || !messageBtn) return;
     
+    // Clear any lingering inline animation override (can be set by closeUserProfile cleanup)
+    // so the CSS animation re-fires cleanly on this open.
+    const modalContent = modal.querySelector('.user-profile-modal');
+    if (modalContent) {
+        modalContent.style.animation = '';
+        modalContent.style.transform = '';
+        modalContent.style.transition = '';
+    }
+    
     ensureProfileFetched(pubkey);
     const metadata = getProfileMetadata(pubkey) || {};
     const displayName = getDisplayNameForPubkey(pubkey);
@@ -1001,7 +1010,7 @@ function showUserProfile(pubkey) {
     avatar.innerHTML = getAvatarMarkupForPubkey(pubkey, 80);
     
     // Set basic info
-    name.textContent = displayName;
+    setTextWithEmoji(name, displayName);
     try {
         const fullNpub = window.NostrTools.nip19.npubEncode(pubkey);
         npub.textContent = formatPubkeyForDisplay(pubkey);
@@ -1093,10 +1102,17 @@ function closeUserProfile() {
     if (modalOverlay) {
         modalOverlay.classList.remove('active');
         if (modalContent) {
-            // Reset transform for next open
+            // Reset inline styles after the overlay finishes closing (300ms)
+            // This clears any swipe-gesture transforms (mobile) AND resets the
+            // animation so it re-fires cleanly on the next open (desktop).
             setTimeout(() => {
                 modalContent.style.transform = '';
                 modalContent.style.transition = '';
+                // Force animation reset so it re-triggers on next open
+                modalContent.style.animation = 'none';
+                // Void reflow to flush the animation reset before clearing it
+                void modalContent.offsetWidth;
+                modalContent.style.animation = '';
             }, 300);
         }
     }

@@ -129,8 +129,12 @@ function formatMessageTimestamp(timestamp) {
     return `${datePart}, ${shortTime}`;
 }
 
-// Escape HTML to prevent XSS
+// Escape HTML to prevent XSS and replace shortcodes
 function escapeHtml(text) {
+    if (!text) return text;
+    if (typeof replaceShortcodes === 'function') {
+        text = replaceShortcodes(text);
+    }
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
