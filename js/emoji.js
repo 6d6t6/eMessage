@@ -106,16 +106,73 @@ function resolveEmoji(item) {
 
 // ── Category definitions (matching EMOJI_DATA .k exactly) ────────────────────
 
+// ── Favorite Emojis ──────────────────────────────────────────────────────────
+
+function getFavoriteEmojis() {
+    try {
+        return JSON.parse(localStorage.getItem('emessage_favorite_emojis')) || [];
+    } catch {
+        return [];
+    }
+}
+
+function isFavoriteEmoji(char) {
+    const favorites = getFavoriteEmojis();
+    // Strip variation selector for comparison
+    const target = char.replace(/\uFE0F/g, '');
+    return favorites.some(f => f.c.replace(/\uFE0F/g, '') === target);
+}
+
+function addFavoriteEmoji(char, shortcode) {
+    const favorites = getFavoriteEmojis();
+    const target = char.replace(/\uFE0F/g, '');
+    if (favorites.some(f => f.c.replace(/\uFE0F/g, '') === target)) return;
+    favorites.unshift({ c: char, s: [shortcode] });
+    localStorage.setItem('emessage_favorite_emojis', JSON.stringify(favorites.slice(0, 100)));
+}
+
+function removeFavoriteEmoji(char) {
+    const favorites = getFavoriteEmojis();
+    const target = char.replace(/\uFE0F/g, '');
+    const filtered = favorites.filter(f => f.c.replace(/\uFE0F/g, '') !== target);
+    localStorage.setItem('emessage_favorite_emojis', JSON.stringify(filtered));
+}
+
+// ── Global Context Menu Actions ───────────────────────────────────────────────
+
+window.handleEmojiFavoriteAction = function(char, shortcode, currentlyFav) {
+    if (currentlyFav) {
+        removeFavoriteEmoji(char);
+        showNotification('Removed from favorites', 'info');
+    } else {
+        addFavoriteEmoji(char, shortcode);
+        showNotification('Added to favorites', 'success');
+    }
+    if (typeof hideContextMenu === 'function') hideContextMenu();
+    // Refresh the grid if we're in the favorites category
+    if (_activeCategory === 'favorites' || _activeCategory === 'recent') {
+        renderCurrentCategory();
+    }
+};
+
+window.copyEmojiToClipboard = function(char) {
+    navigator.clipboard.writeText(char).then(() => {
+        showNotification('Emoji copied to clipboard', 'success');
+    });
+    if (typeof hideContextMenu === 'function') hideContextMenu();
+};
+
 const EMOJI_CATEGORIES = [
-    { id: 'recent',             label: 'Recently Used',     icon: '🕐' },
-    { id: 'Smileys & People',   label: 'Smileys & People',  icon: '😀' },
-    { id: 'Animals & Nature',   label: 'Animals & Nature',  icon: '🐶' },
-    { id: 'Food & Drink',       label: 'Food & Drink',      icon: '🍕' },
-    { id: 'Travel & Places',    label: 'Travel & Places',   icon: '✈️' },
-    { id: 'Activities',         label: 'Activities',        icon: '⚽' },
-    { id: 'Objects',            label: 'Objects',           icon: '💡' },
-    { id: 'Symbols',            label: 'Symbols',           icon: '❤️' },
-    { id: 'Flags',              label: 'Flags',             icon: '🏁' },
+    { id: 'recent',    label: 'Recently Used',  icon: 'history' },
+    { id: 'favorites', label: 'Favorites',      icon: 'favorite' },
+    { id: 'smileys',   label: 'Smileys & People', icon: 'sentiment_satisfied' },
+    { id: 'nature',    label: 'Animals & Nature', icon: 'forest' },
+    { id: 'food',      label: 'Food & Drink',     icon: 'lunch_dining' },
+    { id: 'activities',label: 'Activities',       icon: 'sports_esports' },
+    { id: 'travel',    label: 'Travel & Places',  icon: 'distance' },
+    { id: 'objects',   label: 'Objects',          icon: 'lightbulb' },
+    { id: 'symbols',   label: 'Symbols',          icon: 'terminal' },
+    { id: 'flags',     label: 'Flags',            icon: 'flag' },
 ];
 
 // ── Recent emojis ─────────────────────────────────────────────────────────────
@@ -143,9 +200,24 @@ function getCatMap() {
     if (_catMap) return _catMap;
     _catMap = {};
     EMOJI_CATEGORIES.forEach(c => { _catMap[c.id] = []; });
+    
+    const idMap = {
+        'Smileys & People': 'smileys',
+        'Animals & Nature': 'nature',
+        'Food & Drink':     'food',
+        'Activities':       'activities',
+        'Travel & Places':  'travel',
+        'Objects':          'objects',
+        'Symbols':          'symbols',
+        'Flags':            'flags'
+    };
+
     if (typeof EMOJI_DATA !== 'undefined') {
         EMOJI_DATA.forEach(item => {
-            if (_catMap[item.k]) _catMap[item.k].push(item);
+            const targetId = idMap[item.k];
+            if (targetId && _catMap[targetId]) {
+                _catMap[targetId].push(item);
+            }
         });
     }
     return _catMap;
@@ -274,7 +346,7 @@ function buildPicker() {
             ${EMOJI_CATEGORIES.map(c =>
                 `<button class="ep-cat-btn" data-cat="${c.id}"
                          title="${c.label}" aria-label="${c.label}" role="tab"
-                 >${c.icon}</button>`
+                 ><span class="material-symbols-rounded">${c.icon}</span></button>`
             ).join('')}
         </div>
         <div class="ep-grid-wrap">
@@ -329,39 +401,29 @@ function buildPicker() {
     // Emoji grid — delegation
     const grid = el.querySelector('.ep-grid');
 
-    // Click → insert emoji
+    let _menuOpened = false;
+
     grid.addEventListener('click', e => {
+        if (_menuOpened) {
+            _menuOpened = false;
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+        }
         const btn = e.target.closest('.ep-emoji-btn');
         if (!btn) return;
         _insertFromBtn(btn);
     });
 
-    // Long-press / contextmenu → skin tone popover
-    let _pressTimer = null;
-    grid.addEventListener('pointerdown', e => {
-        const btn = e.target.closest('.ep-emoji-btn');
-        if (!btn || !btn.dataset.hasVariants) return;
-        _pressTimer = setTimeout(() => {
-            _pressTimer = null;
-            const item = EMOJI_DATA && EMOJI_DATA.find(d => d.c === btn.dataset.baseEmoji);
-            if (!item) return;
-            showTonePopover(btn, item, (emoji) => {
-                if (typeof _pickerCallback === 'function') _pickerCallback(emoji);
-            });
-        }, 400);
-    });
-    grid.addEventListener('pointerup',    () => clearTimeout(_pressTimer));
-    grid.addEventListener('pointerleave', () => clearTimeout(_pressTimer));
     grid.addEventListener('contextmenu', e => {
         const btn = e.target.closest('.ep-emoji-btn');
-        if (!btn || !btn.dataset.hasVariants) return;
+        if (!btn) return;
         e.preventDefault();
-        clearTimeout(_pressTimer);
-        const item = EMOJI_DATA && EMOJI_DATA.find(d => d.c === btn.dataset.baseEmoji);
-        if (!item) return;
-        showTonePopover(btn, item, (emoji) => {
-            if (typeof _pickerCallback === 'function') _pickerCallback(emoji);
-        });
+        e.stopPropagation();
+        _menuOpened = true;
+        // Reset _menuOpened after a short delay in case no click follows
+        setTimeout(() => { _menuOpened = false; }, 500);
+        showEmojiContextMenu(e, btn.dataset.emoji, btn.dataset.shortcode);
     });
 
     // Hover preview
@@ -376,12 +438,103 @@ function buildPicker() {
         el.querySelector('.ep-preview-name').textContent  = '';
     });
 
-    // Don't close when clicking inside picker
-    el.addEventListener('mousedown', e => e.stopPropagation());
-    el.addEventListener('click',     e => e.stopPropagation());
-
+    // Don't stop propagation anymore to allow context menus to close
+    // Picker closing is handled by _pickerClose which checks contains()
+    
     return el;
 }
+
+function showEmojiContextMenu(event, emojiChar, shortcode) {
+    if (typeof showContextMenu === 'undefined') return;
+    
+    event.preventDefault();
+    event.stopPropagation();
+    
+    const isFav = isFavoriteEmoji(emojiChar);
+    const isMobile = window.innerWidth <= 900;
+    const menu = document.getElementById('contextMenu');
+    if (!menu) return;
+
+    const btn = event.target.closest('.ep-emoji-btn');
+    const hasVariants = btn?.dataset.hasVariants === 'true';
+
+    let menuContent = '';
+    
+    if (isMobile) {
+        menuContent = `
+            <div class="context-menu-drag-handle"></div>
+            <div class="context-menu-header" style="padding: 16px; border-bottom: 1px solid #2a2a2a; display: flex; align-items: center; gap: 12px;">
+                <span style="font-size: 28px;">${emojiChar}</span>
+                <span style="font-size: 14px; font-weight: 600; color: #fff;">:${shortcode}:</span>
+            </div>
+            <div class="context-menu-item" onclick="handleEmojiFavoriteAction('${emojiChar}', '${shortcode}', ${isFav})">
+                <span class="material-symbols-rounded">${isFav ? 'heart_broken' : 'favorite'}</span>
+                ${isFav ? 'Remove from Favorites' : 'Add to Favorites'}
+            </div>
+        `;
+        if (hasVariants) {
+            menuContent += `
+                <div class="context-menu-item" onclick="openTonePopoverFromMenu('${btn.dataset.baseEmoji}')">
+                    <span class="material-symbols-rounded">palette</span>
+                    Skin Tones
+                </div>
+            `;
+        }
+    } else {
+        menuContent = `
+            <div class="context-menu-item" onclick="handleEmojiFavoriteAction('${emojiChar}', '${shortcode}', ${isFav})">
+                <span class="material-symbols-rounded">${isFav ? 'heart_broken' : 'favorite'}</span>
+                ${isFav ? 'Unfavorite' : 'Favorite'}
+            </div>
+            <div class="context-menu-item" onclick="copyEmojiToClipboard('${emojiChar}')">
+                <span class="material-symbols-rounded">content_copy</span>
+                Copy
+            </div>
+        `;
+        if (hasVariants) {
+            menuContent += `
+                <div class="context-menu-separator"></div>
+                <div class="context-menu-item" onclick="openTonePopoverFromMenu('${btn.dataset.baseEmoji}')">
+                    <span class="material-symbols-rounded">palette</span>
+                    Skin Tones
+                </div>
+            `;
+        }
+    }
+
+    menu.innerHTML = menuContent;
+
+    const overlay = document.getElementById('contextMenuOverlay');
+    window.__contextMenuOpenType = 'emoji';
+    
+    menu.classList.remove('horizontal');
+    if (overlay) overlay.classList.remove('horizontal-overlay');
+
+    if (typeof positionContextMenu === 'function') {
+        positionContextMenu(event, menu);
+    }
+    
+    menu.classList.add('show');
+    if (overlay) overlay.classList.add('active');
+    document.body.classList.add('context-menu-open');
+}
+
+window.openTonePopoverFromMenu = function(baseEmoji) {
+    if (typeof hideContextMenu === 'function') hideContextMenu();
+    const picker = buildPicker();
+    const grid = picker.querySelector('.ep-grid');
+    const btn = Array.from(grid.querySelectorAll('.ep-emoji-btn')).find(b => b.dataset.baseEmoji === baseEmoji);
+    if (!btn) return;
+    
+    const item = EMOJI_DATA && EMOJI_DATA.find(d => d.c === baseEmoji);
+    if (!item) return;
+    
+    setTimeout(() => {
+        showTonePopover(btn, item, (emoji) => {
+            if (typeof _pickerCallback === 'function') _pickerCallback(emoji);
+        });
+    }, 100);
+};
 
 function _refreshSkinBtn() {
     const btn  = document.getElementById('epSkinBtn');
@@ -427,6 +580,8 @@ let _currentItems = [];
 function renderCurrentCategory() {
     if (_activeCategory === 'recent') {
         renderGrid(getRecentEmojis());
+    } else if (_activeCategory === 'favorites') {
+        renderGrid(getFavoriteEmojis());
     } else {
         renderGrid(getCatMap()[_activeCategory] || []);
     }
@@ -465,6 +620,11 @@ function openEmojiPicker(triggerEl, callback) {
 
     if (_pickerClose) document.removeEventListener('mousedown', _pickerClose);
     _pickerClose = (e) => {
+        // Don't close the picker when interacting with the context menu or its overlay
+        const ctxMenu    = document.getElementById('contextMenu');
+        const ctxOverlay = document.getElementById('contextMenuOverlay');
+        if (ctxMenu    && ctxMenu.contains(e.target))    return;
+        if (ctxOverlay && ctxOverlay.contains(e.target)) return;
         if (!picker.contains(e.target) && !triggerEl.contains(e.target)) closeEmojiPicker();
     };
     setTimeout(() => document.addEventListener('mousedown', _pickerClose), 0);

@@ -654,6 +654,19 @@ function showContextMenu(event, messageElement, message, nostrEvent) {
 function hideContextMenu() {
     if (!contextMenu) return;
 
+    // Clear any inline styles set by the gesture handler (touchstart sets transition:'none'
+    // and willChange even for plain taps). If left in place they override the CSS slide-out
+    // animation and the menu content lingers until visibility:hidden kicks in.
+    contextMenu.style.transform  = '';
+    contextMenu.style.transition = '';
+    contextMenu.style.willChange = '';
+    const _overlay = document.getElementById('contextMenuOverlay');
+    if (_overlay) {
+        _overlay.style.backgroundColor = '';
+        _overlay.style.transition      = '';
+        _overlay.style.willChange      = '';
+    }
+
     // Reset horizontal bar state if applicable
     const wasHorizontal = contextMenu.classList.contains('horizontal');
     if (wasHorizontal) {

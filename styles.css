@@ -1668,28 +1668,31 @@ body {
 .ep-cat-btn {
     width: 34px;
     height: 30px;
-    background: none;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 18px;
     display: flex;
     align-items: center;
     justify-content: center;
-    opacity: 0.5;
-    transition: opacity 0.12s, background 0.12s;
+    background: none;
+    border: none;
+    border-radius: 6px;
+    color: #6b7280;
+    cursor: pointer;
     flex-shrink: 0;
     font-family: var(--font-default);
+    transition: all 0.15s ease;
+}
+
+.ep-cat-btn .material-symbols-rounded {
+    font-size: 20px;
 }
 
 .ep-cat-btn:hover {
-    opacity: 1;
     background: #2a2a2a;
+    color: #fff;
 }
 
 .ep-cat-btn.active {
-    opacity: 1;
     background: rgba(59, 130, 246, 0.18);
+    color: #3b82f6;
 }
 
 /* Emoji grid */
@@ -3162,7 +3165,7 @@ body {
     box-shadow: 0 0 0px 1px var(--border-primary), var(--shadow-md);
     padding: var(--spacing-xs);
     min-width: 180px;
-    z-index: 1000;
+    z-index: 100001;
     opacity: 0;
     visibility: hidden;
     /* visibility delay on hide lets opacity animate out before disappearing */
@@ -3178,7 +3181,7 @@ body {
 }
 
 #contextMenuOverlay {
-    z-index: 2000;
+    z-index: 100000;
     background: transparent;
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
@@ -3933,7 +3936,7 @@ body.context-menu-open .sel-handle {
     }
 
     #contextMenuOverlay {
-        z-index: 8000;
+        z-index: 100000;
     }
 
     #userProfileModal.active,
