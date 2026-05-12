@@ -130,33 +130,72 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Wire up emoji picker for chat input
     const chatEmojiBtn = document.getElementById('chatEmojiBtn');
+    let lastSelection = { start: 0, end: 0 };
+    let isRestoring = false;
+
     if (chatEmojiBtn && messageInput) {
+        // Track selection in real-time to prevent "jump to start" bug
+        const saveSelection = () => {
+            if (isRestoring) return;
+            if (document.activeElement === messageInput) {
+                lastSelection.start = messageInput.selectionStart;
+                lastSelection.end = messageInput.selectionEnd;
+            }
+        };
+        // Listen to everything that can move the cursor
+        document.addEventListener('selectionchange', saveSelection);
+        messageInput.addEventListener('mousedown', saveSelection);
+        messageInput.addEventListener('mouseup', saveSelection);
+        messageInput.addEventListener('keyup', saveSelection);
+        messageInput.addEventListener('input', saveSelection);
+        messageInput.addEventListener('focus', saveSelection);
+        messageInput.addEventListener('blur', saveSelection);
+
         chatEmojiBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             const isMobile = window.innerWidth <= 900;
+            
             const opened = toggleEmojiPicker(chatEmojiBtn, (emoji) => {
-                const start = messageInput.selectionStart ?? messageInput.value.length;
-                const end = messageInput.selectionEnd ?? messageInput.value.length;
-                const before = messageInput.value.slice(0, start);
-                const after = messageInput.value.slice(end);
+                // Determine exactly where to insert
+                let start, end;
+                if (document.activeElement === messageInput) {
+                    start = messageInput.selectionStart;
+                    end = messageInput.selectionEnd;
+                } else {
+                    // If blurred, we MUST use our verified last known position
+                    start = lastSelection.start;
+                    end = lastSelection.end;
+                }
+
+                const val = messageInput.value;
+                const before = val.slice(0, start);
+                const after = val.slice(end);
                 messageInput.value = before + emoji + after;
+                
                 const newPos = start + emoji.length;
+                
+                // CRITICAL: Update our tracked position immediately 
+                // so the NEXT emoji knows where to go
+                lastSelection.start = lastSelection.end = newPos;
+                
+                // Try to set it on the element as well (might only stick if focused)
                 messageInput.setSelectionRange(newPos, newPos);
                 
-                // On desktop, keep focus for continuous typing.
-                // On mobile, do NOT refocus so the keyboard doesn't cover the picker.
                 if (!isMobile) {
                     messageInput.focus();
                 }
                 
-                // Trigger resize
                 messageInput.style.height = '48px';
                 messageInput.style.height = Math.min(messageInput.scrollHeight, 120) + 'px';
             });
             
-            // If we just toggled it CLOSED, refocus the input (reopening keyboard on mobile)
             if (!opened) {
+                // When toggling closed, refocus and explicitly restore the last cursor position.
+                // We use a guard to prevent the 'focus' event from overwriting our good selection with 0.
+                isRestoring = true;
                 messageInput.focus();
+                messageInput.setSelectionRange(lastSelection.start, lastSelection.end);
+                setTimeout(() => { isRestoring = false; }, 50);
             }
         });
     }

@@ -460,12 +460,12 @@ function openEmojiPicker(triggerEl, callback) {
     positionPicker(picker, triggerEl);
     picker.classList.add('visible');
     document.body.classList.add('emoji-picker-open');
-    setPickerCategory('recent');
+    setPickerCategory(_activeCategory);
     _refreshSkinBtn();
 
     if (_pickerClose) document.removeEventListener('mousedown', _pickerClose);
     _pickerClose = (e) => {
-        if (!picker.contains(e.target) && e.target !== triggerEl) closeEmojiPicker();
+        if (!picker.contains(e.target) && !triggerEl.contains(e.target)) closeEmojiPicker();
     };
     setTimeout(() => document.addEventListener('mousedown', _pickerClose), 0);
 
