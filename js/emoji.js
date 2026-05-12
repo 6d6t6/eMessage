@@ -468,7 +468,18 @@ function openEmojiPicker(triggerEl, callback) {
         if (!picker.contains(e.target) && e.target !== triggerEl) closeEmojiPicker();
     };
     setTimeout(() => document.addEventListener('mousedown', _pickerClose), 0);
-    setTimeout(() => picker.querySelector('.ep-search')?.focus(), 60);
+
+    // Mobile-specific behavior
+    const isMobile = window.innerWidth <= 900;
+    if (isMobile) {
+        // Close native keyboard
+        if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) {
+            document.activeElement.blur();
+        }
+    } else {
+        // Auto-focus search on desktop only
+        setTimeout(() => picker.querySelector('.ep-search')?.focus(), 60);
+    }
 }
 
 function closeEmojiPicker() {
