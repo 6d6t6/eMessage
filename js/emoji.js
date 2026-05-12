@@ -46,6 +46,30 @@ document.addEventListener('input', (e) => {
     }
 });
 
+// ── Custom Search Tags ────────────────────────────────────────────────────────
+
+// You can add your own search tags here! This won't be overwritten if we rebuild the emoji map.
+// Format: 'emoji': ['tag1', 'tag2']
+const CUSTOM_SEARCH_TAGS = {
+    '✨': ['star', 'stars', 'magic', 'sparkle'],
+    '💫': ['star', 'stars', 'dizzy'],
+    '💖': ['star', 'stars', 'sparkle', 'love'],
+    '💯': ['100', 'hundred', 'perfect'],
+    '🔥': ['fire', 'lit', 'hot'],
+};
+
+// Inject custom tags into the loaded data
+if (typeof EMOJI_DATA !== 'undefined') {
+    EMOJI_DATA.forEach(item => {
+        const baseChar = item.c.replace(/\uFE0F/g, '');
+        if (CUSTOM_SEARCH_TAGS[item.c]) {
+            item.s.push(...CUSTOM_SEARCH_TAGS[item.c]);
+        } else if (CUSTOM_SEARCH_TAGS[baseChar]) {
+            item.s.push(...CUSTOM_SEARCH_TAGS[baseChar]);
+        }
+    });
+}
+
 // ── Skin-tone state ───────────────────────────────────────────────────────────
 
 const SKIN_TONE_ORDER = ['1F3FB', '1F3FC', '1F3FD', '1F3FE', '1F3FF'];
@@ -72,7 +96,9 @@ function resolveEmoji(item) {
     // Return the best char for an item given current skin-tone preference
     const tone = _selectedTone || getStoredTone();
     if (tone && item.v && item.v.length > 0) {
-        const variant = item.v.find(v => v.t === tone);
+        // If tone is single (e.g. 1F3FB) but item has multi-tones (e.g. 1F3FB,1F3FB), map it.
+        const targetTone = tone.includes(',') ? tone : (item.v.some(x => x.t.includes(',')) ? `${tone},${tone}` : tone);
+        const variant = item.v.find(v => v.t === targetTone || v.t === tone);
         if (variant) return variant.c;
     }
     return item.c;
@@ -82,8 +108,7 @@ function resolveEmoji(item) {
 
 const EMOJI_CATEGORIES = [
     { id: 'recent',             label: 'Recently Used',     icon: '🕐' },
-    { id: 'Smileys & Emotion',  label: 'Smileys & Emotion', icon: '😀' },
-    { id: 'People & Body',      label: 'People & Body',     icon: '👋' },
+    { id: 'Smileys & People',   label: 'Smileys & People',  icon: '😀' },
     { id: 'Animals & Nature',   label: 'Animals & Nature',  icon: '🐶' },
     { id: 'Food & Drink',       label: 'Food & Drink',      icon: '🍕' },
     { id: 'Travel & Places',    label: 'Travel & Places',   icon: '✈️' },
@@ -150,30 +175,49 @@ function showTonePopover(anchorBtn, baseItem, onChoose) {
     const pop = buildTonePopover();
     _toneTarget = anchorBtn;
 
-    // Build: default (yellow) + 5 tones
-    const options = [{ label: 'Default', char: baseItem.c, tone: null }];
+    const isMulti = baseItem.v && baseItem.v.some(v => v.t.includes(','));
+    pop.classList.toggle('multi-tone', isMulti);
+
+    const options = [{ label: 'Default', char: baseItem.c, tone: null, isDefault: true }];
+    
     if (baseItem.v) {
-        SKIN_TONE_ORDER.forEach(t => {
-            const v = baseItem.v.find(x => x.t === t);
-            if (v) options.push({ label: SKIN_TONE_LABELS[t], char: v.c, tone: t });
-        });
+        if (isMulti) {
+            // For multi-tone, just add all 25 variants.
+            baseItem.v.forEach(v => {
+                options.push({ label: 'Mixed Tone', char: v.c, tone: v.t });
+            });
+        } else {
+            SKIN_TONE_ORDER.forEach(t => {
+                const v = baseItem.v.find(x => x.t === t);
+                if (v) options.push({ label: SKIN_TONE_LABELS[t], char: v.c, tone: t });
+            });
+        }
     }
 
-    pop.innerHTML = options.map(o =>
-        `<button class="ep-tone-btn${o.tone === (_selectedTone || getStoredTone()) ? ' active' : ''}"
+    const currentTone = _selectedTone || getStoredTone();
+    
+    pop.innerHTML = options.map(o => {
+        let active = false;
+        if (isMulti && o.tone === currentTone) active = true;
+        else if (isMulti && o.tone === `${currentTone},${currentTone}`) active = true;
+        else if (!isMulti && o.tone === currentTone) active = true;
+        
+        return `<button class="ep-tone-btn${active ? ' active' : ''}${o.isDefault ? ' default' : ''}"
                  data-tone="${o.tone || ''}"
                  data-emoji="${o.char}"
                  title="${o.label}"
-                 aria-label="${o.label}">${o.char}</button>`
-    ).join('');
+                 aria-label="${o.label}">${o.char}</button>`;
+    }).join('');
 
     // Position near anchor
     const r  = anchorBtn.getBoundingClientRect();
-    const pw = options.length * 38 + 8;
+    const pw = isMulti ? 202 : (options.length * 38 + 8);
+    const ph = isMulti ? 240 : 46;
+    
     let left = r.left + r.width / 2 - pw / 2;
     if (left < 8) left = 8;
     if (left + pw > window.innerWidth - 8) left = window.innerWidth - pw - 8;
-    const top = r.top - 52;
+    const top = r.top - ph - 6;
 
     pop.style.left = left + 'px';
     pop.style.top  = (top < 8 ? r.bottom + 8 : top) + 'px';
@@ -415,6 +459,7 @@ function openEmojiPicker(triggerEl, callback) {
     _selectedTone   = getStoredTone();
     positionPicker(picker, triggerEl);
     picker.classList.add('visible');
+    document.body.classList.add('emoji-picker-open');
     setPickerCategory('recent');
     _refreshSkinBtn();
 
@@ -427,7 +472,10 @@ function openEmojiPicker(triggerEl, callback) {
 }
 
 function closeEmojiPicker() {
-    if (_pickerEl) _pickerEl.classList.remove('visible');
+    if (_pickerEl) {
+        _pickerEl.classList.remove('visible');
+        document.body.classList.remove('emoji-picker-open');
+    }
     hideTonePopover();
     if (_pickerClose) { document.removeEventListener('mousedown', _pickerClose); _pickerClose = null; }
 }

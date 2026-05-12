@@ -55,6 +55,13 @@
     src: url("https://unpkg.com/@sableclient/twemoji-font/dist/files/twemoji.woff2") format("woff2");
 }
 
+/* Twemoji COLRv1 Patch for emojis with complex clipping masks (🥺 and 🥹) */
+@font-face {
+    font-family: 'Twemoji';
+    src: url("/assets/fonts/Twemoji_COLRv1.ttf") format("truetype");
+    unicode-range: U+1F97A, U+1F979;
+}
+
 * {
     margin: 0;
     padding: 0;
@@ -1778,6 +1785,7 @@ body {
     position: fixed;
     z-index: 10000;
     display: flex;
+    flex-wrap: wrap;
     gap: 2px;
     padding: 4px;
     background: #1a1a1a;
@@ -1795,6 +1803,17 @@ body {
     visibility: visible;
     transform: translateY(0) scale(1);
     transition: opacity 0.12s ease, transform 0.12s ease, visibility 0s;
+}
+#emojiTonePopover.multi-tone {
+    width: 202px; /* 5 * 38px + 4 * 2px + 8px padding = 206px approx */
+    justify-content: flex-start;
+}
+#emojiTonePopover.multi-tone .ep-tone-btn.default {
+    width: 100%;
+    height: 32px;
+    margin-bottom: 4px;
+    font-size: 16px;
+    border-radius: 6px;
 }
 .ep-tone-btn {
     width: 36px;
@@ -4239,4 +4258,30 @@ body.context-menu-open .sel-handle {
     left: 50%;
     transform: translateX(-50%);
     bottom: -12px;
+}
+/* Emoji Picker Mobile Responsive Mode */
+@media (max-width: 900px) {
+    #emojiPicker {
+        top: auto !important;
+        left: 0 !important;
+        bottom: 0 !important;
+        width: 100% !important;
+        height: 45vh !important;
+        max-height: 400px !important;
+        border-radius: 16px 16px 0 0 !important;
+        border-left: none !important;
+        border-right: none !important;
+        border-bottom: none !important;
+        transform: translateY(100%) !important;
+        box-shadow: 0 -8px 40px rgba(0,0,0,0.6) !important;
+    }
+    #emojiPicker.visible {
+        transform: translateY(0) !important;
+    }
+    .app-container {
+        transition: padding-bottom 0.15s ease;
+    }
+    body.emoji-picker-open .app-container {
+        padding-bottom: min(45vh, 400px);
+    }
 }
