@@ -133,7 +133,8 @@ document.addEventListener('DOMContentLoaded', function() {
     if (chatEmojiBtn && messageInput) {
         chatEmojiBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            toggleEmojiPicker(chatEmojiBtn, (emoji) => {
+            const isMobile = window.innerWidth <= 900;
+            const opened = toggleEmojiPicker(chatEmojiBtn, (emoji) => {
                 const start = messageInput.selectionStart ?? messageInput.value.length;
                 const end = messageInput.selectionEnd ?? messageInput.value.length;
                 const before = messageInput.value.slice(0, start);
@@ -141,11 +142,22 @@ document.addEventListener('DOMContentLoaded', function() {
                 messageInput.value = before + emoji + after;
                 const newPos = start + emoji.length;
                 messageInput.setSelectionRange(newPos, newPos);
-                messageInput.focus();
+                
+                // On desktop, keep focus for continuous typing.
+                // On mobile, do NOT refocus so the keyboard doesn't cover the picker.
+                if (!isMobile) {
+                    messageInput.focus();
+                }
+                
                 // Trigger resize
                 messageInput.style.height = '48px';
                 messageInput.style.height = Math.min(messageInput.scrollHeight, 120) + 'px';
             });
+            
+            // If we just toggled it CLOSED, refocus the input (reopening keyboard on mobile)
+            if (!opened) {
+                messageInput.focus();
+            }
         });
     }
 });

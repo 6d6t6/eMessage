@@ -495,8 +495,10 @@ function toggleEmojiPicker(triggerEl, callback) {
     const picker = buildPicker();
     if (picker.classList.contains('visible')) {
         closeEmojiPicker();
+        return false;
     } else {
         openEmojiPicker(triggerEl, callback);
+        return true;
     }
 }
 
