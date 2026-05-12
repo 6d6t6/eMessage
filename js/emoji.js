@@ -39,8 +39,8 @@ document.addEventListener('input', (e) => {
     const replaced = replaceShortcodes(original);
     if (replaced !== original) {
         const start = el.selectionStart;
-        const end   = el.selectionEnd;
-        const diff  = original.length - replaced.length;
+        const end = el.selectionEnd;
+        const diff = original.length - replaced.length;
         el.value = replaced;
         el.setSelectionRange(Math.max(0, start - diff), Math.max(0, end - diff));
     }
@@ -81,6 +81,22 @@ const SKIN_TONE_LABELS = {
     '1F3FF': 'Dark',
 };
 
+// Shortcode suffix for each skin tone codepoint (Discord-style _toneN)
+const TONE_SUFFIX = {
+    '1F3FB': '_tone1',
+    '1F3FC': '_tone2',
+    '1F3FD': '_tone3',
+    '1F3FE': '_tone4',
+    '1F3FF': '_tone5',
+};
+
+// Build a full shortcode for a toned variant: 'muscle' + '1F3FD' → 'muscle_tone3'
+// For multi-tone emojis: 'handshake' + '1F3FB,1F3FF' → 'handshake_tone1_tone5'
+function toneShortcode(base, tone) {
+    if (!tone) return base;
+    return base + tone.split(',').map(t => TONE_SUFFIX[t] || '').join('');
+}
+
 let _selectedTone = null; // null = default (yellow)
 
 function getStoredTone() {
@@ -92,10 +108,31 @@ function setStoredTone(tone) {
     _selectedTone = tone;
 }
 
+function getEmojiTone(baseChar) {
+    try {
+        const tones = JSON.parse(localStorage.getItem('emessage_individual_tones') || '{}');
+        return tones[baseChar] || null;
+    } catch { return null; }
+}
+function setEmojiTone(baseChar, tone) {
+    try {
+        const tones = JSON.parse(localStorage.getItem('emessage_individual_tones') || '{}');
+        // Store 'default' explicitly so resolveEmoji knows not to fall back to global
+        tones[baseChar] = tone || 'default';
+        localStorage.setItem('emessage_individual_tones', JSON.stringify(tones));
+    } catch { }
+}
+function clearIndividualTones() {
+    localStorage.removeItem('emessage_individual_tones');
+}
+
 function resolveEmoji(item) {
     // Return the best char for an item given current skin-tone preference
-    const tone = _selectedTone || getStoredTone();
-    if (tone && item.v && item.v.length > 0) {
+    // Prioritize individual emoji preference, then global preference.
+    let tone = getEmojiTone(item.c);
+    if (tone === null) tone = _selectedTone || getStoredTone();
+
+    if (tone && tone !== 'default' && item.v && item.v.length > 0) {
         // If tone is single (e.g. 1F3FB) but item has multi-tones (e.g. 1F3FB,1F3FB), map it.
         const targetTone = tone.includes(',') ? tone : (item.v.some(x => x.t.includes(',')) ? `${tone},${tone}` : tone);
         const variant = item.v.find(v => v.t === targetTone || v.t === tone);
@@ -140,7 +177,7 @@ function removeFavoriteEmoji(char) {
 
 // ── Global Context Menu Actions ───────────────────────────────────────────────
 
-window.handleEmojiFavoriteAction = function(char, shortcode, currentlyFav) {
+window.handleEmojiFavoriteAction = function (char, shortcode, currentlyFav) {
     if (currentlyFav) {
         removeFavoriteEmoji(char);
         showNotification('Removed from favorites', 'info');
@@ -155,7 +192,7 @@ window.handleEmojiFavoriteAction = function(char, shortcode, currentlyFav) {
     }
 };
 
-window.copyEmojiToClipboard = function(char) {
+window.copyEmojiToClipboard = function (char) {
     navigator.clipboard.writeText(char).then(() => {
         showNotification('Emoji copied to clipboard', 'success');
     });
@@ -163,22 +200,22 @@ window.copyEmojiToClipboard = function(char) {
 };
 
 const EMOJI_CATEGORIES = [
-    { id: 'recent',    label: 'Recently Used',  icon: 'history' },
-    { id: 'favorites', label: 'Favorites',      icon: 'favorite' },
-    { id: 'smileys',   label: 'Smileys & People', icon: 'sentiment_satisfied' },
-    { id: 'nature',    label: 'Animals & Nature', icon: 'forest' },
-    { id: 'food',      label: 'Food & Drink',     icon: 'lunch_dining' },
-    { id: 'activities',label: 'Activities',       icon: 'sports_esports' },
-    { id: 'travel',    label: 'Travel & Places',  icon: 'distance' },
-    { id: 'objects',   label: 'Objects',          icon: 'lightbulb' },
-    { id: 'symbols',   label: 'Symbols',          icon: 'terminal' },
-    { id: 'flags',     label: 'Flags',            icon: 'flag' },
+    { id: 'recent', label: 'Recently Used', icon: 'history' },
+    { id: 'favorites', label: 'Favorites', icon: 'favorite' },
+    { id: 'smileys', label: 'Smileys & People', icon: 'sentiment_satisfied' },
+    { id: 'nature', label: 'Animals & Nature', icon: 'forest' },
+    { id: 'food', label: 'Food & Drink', icon: 'lunch_dining' },
+    { id: 'activities', label: 'Activities', icon: 'sports_esports' },
+    { id: 'travel', label: 'Travel & Places', icon: 'pedal_bike' },
+    { id: 'objects', label: 'Objects', icon: 'emoji_objects' },
+    { id: 'symbols', label: 'Symbols', icon: 'interests' },
+    { id: 'flags', label: 'Flags', icon: 'flag' },
 ];
 
 // ── Recent emojis ─────────────────────────────────────────────────────────────
 
-const RECENT_KEY  = 'emessage_recent_emojis';
-const MAX_RECENT  = 40;
+const RECENT_KEY = 'emessage_recent_emojis';
+const MAX_RECENT = 40;
 
 function getRecentEmojis() {
     try { return JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); }
@@ -200,16 +237,16 @@ function getCatMap() {
     if (_catMap) return _catMap;
     _catMap = {};
     EMOJI_CATEGORIES.forEach(c => { _catMap[c.id] = []; });
-    
+
     const idMap = {
         'Smileys & People': 'smileys',
         'Animals & Nature': 'nature',
-        'Food & Drink':     'food',
-        'Activities':       'activities',
-        'Travel & Places':  'travel',
-        'Objects':          'objects',
-        'Symbols':          'symbols',
-        'Flags':            'flags'
+        'Food & Drink': 'food',
+        'Activities': 'activities',
+        'Travel & Places': 'travel',
+        'Objects': 'objects',
+        'Symbols': 'symbols',
+        'Flags': 'flags'
     };
 
     if (typeof EMOJI_DATA !== 'undefined') {
@@ -226,7 +263,8 @@ function getCatMap() {
 // ── Skin-tone popover ─────────────────────────────────────────────────────────
 
 let _tonePopover = null;
-let _toneTarget  = null;     // the emoji-btn that was long-pressed / right-clicked
+let _toneTarget = null;     // the emoji-btn that was long-pressed / right-clicked
+let _tonePopClose = null;    // closer listener for the popover
 
 function buildTonePopover() {
     if (_tonePopover) return _tonePopover;
@@ -239,93 +277,169 @@ function buildTonePopover() {
     _tonePopover = el;
 
     el.addEventListener('mousedown', e => e.stopPropagation());
-    el.addEventListener('click',     e => e.stopPropagation());
+    el.addEventListener('click', e => e.stopPropagation());
     return el;
 }
 
-function showTonePopover(anchorBtn, baseItem, onChoose) {
+function showTonePopover(anchorBtn, baseItem, onChoose, isHolding = false) {
     const pop = buildTonePopover();
     _toneTarget = anchorBtn;
 
     const isMulti = baseItem.v && baseItem.v.some(v => v.t.includes(','));
     pop.classList.toggle('multi-tone', isMulti);
 
-    const options = [{ label: 'Default', char: baseItem.c, tone: null, isDefault: true }];
-    
+    const baseShortcode = Array.isArray(baseItem.s) ? baseItem.s[0] : (baseItem.s || '');
+    const options = [{ label: 'Default', char: baseItem.c, tone: null, isDefault: true, shortcode: baseShortcode }];
+
     if (baseItem.v) {
         if (isMulti) {
             // For multi-tone, just add all 25 variants.
             baseItem.v.forEach(v => {
-                options.push({ label: 'Mixed Tone', char: v.c, tone: v.t });
+                options.push({ label: 'Mixed Tone', char: v.c, tone: v.t, shortcode: toneShortcode(baseShortcode, v.t) });
             });
         } else {
             SKIN_TONE_ORDER.forEach(t => {
                 const v = baseItem.v.find(x => x.t === t);
-                if (v) options.push({ label: SKIN_TONE_LABELS[t], char: v.c, tone: t });
+                if (v) options.push({ label: SKIN_TONE_LABELS[t], char: v.c, tone: t, shortcode: toneShortcode(baseShortcode, t) });
             });
         }
     }
 
-    const currentTone = _selectedTone || getStoredTone();
-    
+    // Determine which tone should be highlighted as 'active'.
+    let activeTone = _selectedTone || getStoredTone();
+    const isFooterBtn = anchorBtn && anchorBtn.id === 'epSkinBtn';
+    if (!isFooterBtn) {
+        const individual = getEmojiTone(baseItem.c);
+        if (individual !== null) {
+            activeTone = (individual === 'default' ? null : individual);
+        }
+    }
+
     pop.innerHTML = options.map(o => {
         let active = false;
-        if (isMulti && o.tone === currentTone) active = true;
-        else if (isMulti && o.tone === `${currentTone},${currentTone}`) active = true;
-        else if (!isMulti && o.tone === currentTone) active = true;
-        
+        if (isMulti && o.tone === activeTone) active = true;
+        else if (isMulti && activeTone && o.tone === `${activeTone},${activeTone}`) active = true;
+        else if (!isMulti && o.tone === activeTone) active = true;
+
         return `<button class="ep-tone-btn${active ? ' active' : ''}${o.isDefault ? ' default' : ''}"
                  data-tone="${o.tone || ''}"
                  data-emoji="${o.char}"
+                 data-shortcode="${o.shortcode}"
                  title="${o.label}"
                  aria-label="${o.label}">${o.char}</button>`;
     }).join('');
 
     // Position near anchor
-    const r  = anchorBtn.getBoundingClientRect();
+    const r = anchorBtn.getBoundingClientRect();
     const pw = isMulti ? 202 : (options.length * 38 + 8);
     const ph = isMulti ? 240 : 46;
-    
+
     let left = r.left + r.width / 2 - pw / 2;
     if (left < 8) left = 8;
     if (left + pw > window.innerWidth - 8) left = window.innerWidth - pw - 8;
     const top = r.top - ph - 6;
 
     pop.style.left = left + 'px';
-    pop.style.top  = (top < 8 ? r.bottom + 8 : top) + 'px';
+    pop.style.top = (top < 8 ? r.bottom + 8 : top) + 'px';
     pop.style.minWidth = pw + 'px';
     pop.classList.add('visible');
 
-    pop.onclick = (e) => {
-        const btn = e.target.closest('.ep-tone-btn');
-        if (!btn) return;
-        const tone  = btn.dataset.tone || null;
+    const handleSelection = (btn) => {
+        const tone = btn.dataset.tone || null;
         const emoji = btn.dataset.emoji;
-        setStoredTone(tone);
+
+        if (isFooterBtn) {
+            setStoredTone(tone);
+            clearIndividualTones();
+            _refreshSkinBtn();
+        } else {
+            const baseEmoji = baseItem.c;
+            if (baseEmoji) setEmojiTone(baseEmoji, tone);
+        }
+
         hideTonePopover();
-        // Refresh the grid to show updated tones
+
+        const _grid = _pickerEl && _pickerEl.querySelector('.ep-grid');
+        const _savedScroll = _grid ? _grid.scrollTop : 0;
         renderCurrentCategory();
+        if (_grid) _grid.scrollTop = _savedScroll;
+
         onChoose(emoji);
     };
 
-    // Close on outside click
+    pop.onclick = (e) => {
+        const btn = e.target.closest('.ep-tone-btn');
+        if (btn) handleSelection(btn);
+    };
+
+    if (isHolding) {
+        const onPointerMove = (e) => {
+            const target = document.elementFromPoint(e.clientX, e.clientY);
+            const btn = target ? target.closest('.ep-tone-btn') : null;
+            pop.querySelectorAll('.ep-tone-btn').forEach(b => b.classList.toggle('sliding-over', b === btn));
+        };
+        const onPointerUp = (e) => {
+            const target = document.elementFromPoint(e.clientX, e.clientY);
+            const btn = target ? target.closest('.ep-tone-btn') : null;
+            window.removeEventListener('pointermove', onPointerMove);
+            window.removeEventListener('pointerup', onPointerUp);
+            if (btn) handleSelection(btn);
+        };
+        window.addEventListener('pointermove', onPointerMove);
+        window.addEventListener('pointerup', onPointerUp);
+    }
+
+    // Desktop right-click or mobile long-press on a tone button → context menu
+    // for that specific variant.  We re-attach each time the popover is rebuilt.
+    pop.oncontextmenu = (e) => {
+        const btn = e.target.closest('.ep-tone-btn');
+        if (!btn) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const emoji = btn.dataset.emoji;
+        // data-shortcode holds e.g. 'muscle_tone3'; fall back to bare emoji char
+        const shortcode = btn.dataset.shortcode || emoji;
+        showEmojiContextMenu(e, emoji, shortcode);
+    };
+
+    // Close on outside click / tap
+    if (_tonePopClose) document.removeEventListener('mousedown', _tonePopClose);
+    _tonePopClose = (e) => {
+        const ctxMenu = document.getElementById('contextMenu');
+        const ctxOverlay = document.getElementById('contextMenuOverlay');
+        const tonePop = document.getElementById('emojiTonePopover');
+
+        // Don't close if interacting with the context menu or its overlay
+        if (ctxMenu && ctxMenu.contains(e.target)) return;
+        if (ctxOverlay && ctxOverlay.contains(e.target)) return;
+
+        // Don't close if clicking inside the popover itself (handled by its own listeners)
+        if (tonePop && tonePop.contains(e.target)) return;
+
+        // If clicking anywhere else, close the popover
+        hideTonePopover();
+    };
     setTimeout(() => {
-        document.addEventListener('mousedown', hideTonePopover, { once: true });
+        document.addEventListener('mousedown', _tonePopClose);
     }, 0);
 }
 
 function hideTonePopover() {
     if (_tonePopover) _tonePopover.classList.remove('visible');
     _toneTarget = null;
+    if (_tonePopClose) {
+        document.removeEventListener('mousedown', _tonePopClose);
+        _tonePopClose = null;
+    }
 }
 
 // ── Picker singleton ──────────────────────────────────────────────────────────
 
-let _pickerEl       = null;
+let _pickerEl = null;
 let _pickerCallback = null;
-let _pickerClose    = null;
+let _pickerClose = null;
 let _activeCategory = 'recent';
-let _searchTimer    = null;
+let _searchTimer = null;
 
 function buildPicker() {
     if (_pickerEl) return _pickerEl;
@@ -344,10 +458,10 @@ function buildPicker() {
         </div>
         <div class="ep-categories" role="tablist">
             ${EMOJI_CATEGORIES.map(c =>
-                `<button class="ep-cat-btn" data-cat="${c.id}"
+        `<button class="ep-cat-btn" data-cat="${c.id}"
                          title="${c.label}" aria-label="${c.label}" role="tab"
                  ><span class="material-symbols-rounded">${c.icon}</span></button>`
-            ).join('')}
+    ).join('')}
         </div>
         <div class="ep-grid-wrap">
             <div class="ep-grid" role="listbox"></div>
@@ -380,21 +494,41 @@ function buildPicker() {
     // Skin-tone selector button (bottom-right of footer)
     const skinBtn = el.querySelector('#epSkinBtn');
     if (skinBtn) {
+        let _holdTimer = null;
+        let _holdOrigin = { x: 0, y: 0 };
+        const HOLD_MS = 300; // faster for skin btn
+        const dummyItem = {
+            c: '✋',
+            s: ['raised_hand'],
+            v: SKIN_TONE_ORDER.map(t => ({
+                c: { '1F3FB': '✋🏻', '1F3FC': '✋🏼', '1F3FD': '✋🏽', '1F3FE': '✋🏾', '1F3FF': '✋🏿' }[t],
+                t
+            }))
+        };
+
+        const startHold = (e) => {
+            if (e.button && e.button !== 0) return;
+            _holdOrigin = { x: e.clientX, y: e.clientY };
+            _holdTimer = setTimeout(() => {
+                _holdTimer = null;
+                _menuOpened = true; // suppress upcoming click
+                setTimeout(() => _menuOpened = false, 500);
+                showTonePopover(skinBtn, dummyItem, () => { }, true);
+            }, HOLD_MS);
+        };
+        const cancelHold = () => { if (_holdTimer) { clearTimeout(_holdTimer); _holdTimer = null; } };
+
+        skinBtn.addEventListener('pointerdown', startHold);
+        window.addEventListener('pointerup', cancelHold);
+        window.addEventListener('pointermove', (e) => {
+            if (!_holdTimer) return;
+            if (Math.abs(e.clientX - _holdOrigin.x) > 10 || Math.abs(e.clientY - _holdOrigin.y) > 10) cancelHold();
+        });
+
         skinBtn.addEventListener('click', (e) => {
+            if (_menuOpened) return;
             e.stopPropagation();
-            // Use a dummy item with all 5 tones for the skin selector
-            const dummyItem = {
-                c: '✋',
-                s: ['raised_hand'],
-                v: SKIN_TONE_ORDER.map(t => ({
-                    c: { '1F3FB':'✋🏻','1F3FC':'✋🏼','1F3FD':'✋🏽','1F3FE':'✋🏾','1F3FF':'✋🏿' }[t],
-                    t
-                }))
-            };
-            showTonePopover(skinBtn, dummyItem, () => {
-                _refreshSkinBtn();
-                renderCurrentCategory();
-            });
+            showTonePopover(skinBtn, dummyItem, () => { });
         });
     }
 
@@ -402,6 +536,44 @@ function buildPicker() {
     const grid = el.querySelector('.ep-grid');
 
     let _menuOpened = false;
+
+    // ── Unified hold-and-slide logic for variants ─────────────
+    let _holdTimer = null;
+    let _holdOrigin = { x: 0, y: 0 };
+    const HOLD_MS = 450;
+    const HOLD_MOVE_THRESHOLD = 10;
+
+    grid.addEventListener('pointerdown', e => {
+        if (e.button && e.button !== 0) return;
+        const btn = e.target.closest('.ep-emoji-btn');
+        if (!btn || btn.dataset.hasVariants !== '1') return;
+
+        _holdOrigin = { x: e.clientX, y: e.clientY };
+        _holdTimer = setTimeout(() => {
+            _holdTimer = null;
+            _menuOpened = true;
+            setTimeout(() => { _menuOpened = false; }, 600);
+
+            const baseEmoji = btn.dataset.baseEmoji;
+            const item = typeof EMOJI_DATA !== 'undefined'
+                ? EMOJI_DATA.find(d => d.c === baseEmoji)
+                : null;
+            if (item) {
+                showTonePopover(btn, item, (emoji) => {
+                    if (typeof _pickerCallback === 'function') _pickerCallback(emoji);
+                }, true);
+            }
+        }, HOLD_MS);
+    });
+
+    const _cancelHold = () => { if (_holdTimer) { clearTimeout(_holdTimer); _holdTimer = null; } };
+    window.addEventListener('pointerup', _cancelHold);
+    window.addEventListener('pointermove', e => {
+        if (!_holdTimer) return;
+        const dx = e.clientX - _holdOrigin.x;
+        const dy = e.clientY - _holdOrigin.y;
+        if (Math.sqrt(dx * dx + dy * dy) > HOLD_MOVE_THRESHOLD) _cancelHold();
+    });
 
     grid.addEventListener('click', e => {
         if (_menuOpened) {
@@ -420,9 +592,8 @@ function buildPicker() {
         if (!btn) return;
         e.preventDefault();
         e.stopPropagation();
-        _menuOpened = true;
-        // Reset _menuOpened after a short delay in case no click follows
-        setTimeout(() => { _menuOpened = false; }, 500);
+
+        // Right-click always opens context menu directly on both desktop and mobile
         showEmojiContextMenu(e, btn.dataset.emoji, btn.dataset.shortcode);
     });
 
@@ -431,25 +602,25 @@ function buildPicker() {
         const btn = e.target.closest('.ep-emoji-btn');
         if (!btn) return;
         el.querySelector('.ep-preview-emoji').textContent = btn.dataset.emoji;
-        el.querySelector('.ep-preview-name').textContent  = ':' + btn.dataset.shortcode + ':';
+        el.querySelector('.ep-preview-name').textContent = ':' + btn.dataset.shortcode + ':';
     });
     grid.addEventListener('mouseleave', () => {
         el.querySelector('.ep-preview-emoji').textContent = '';
-        el.querySelector('.ep-preview-name').textContent  = '';
+        el.querySelector('.ep-preview-name').textContent = '';
     });
 
     // Don't stop propagation anymore to allow context menus to close
     // Picker closing is handled by _pickerClose which checks contains()
-    
+
     return el;
 }
 
 function showEmojiContextMenu(event, emojiChar, shortcode) {
     if (typeof showContextMenu === 'undefined') return;
-    
+
     event.preventDefault();
     event.stopPropagation();
-    
+
     const isFav = isFavoriteEmoji(emojiChar);
     const isMobile = window.innerWidth <= 900;
     const menu = document.getElementById('contextMenu');
@@ -459,7 +630,7 @@ function showEmojiContextMenu(event, emojiChar, shortcode) {
     const hasVariants = btn?.dataset.hasVariants === 'true';
 
     let menuContent = '';
-    
+
     if (isMobile) {
         menuContent = `
             <div class="context-menu-drag-handle"></div>
@@ -506,29 +677,29 @@ function showEmojiContextMenu(event, emojiChar, shortcode) {
 
     const overlay = document.getElementById('contextMenuOverlay');
     window.__contextMenuOpenType = 'emoji';
-    
+
     menu.classList.remove('horizontal');
     if (overlay) overlay.classList.remove('horizontal-overlay');
 
     if (typeof positionContextMenu === 'function') {
         positionContextMenu(event, menu);
     }
-    
+
     menu.classList.add('show');
     if (overlay) overlay.classList.add('active');
     document.body.classList.add('context-menu-open');
 }
 
-window.openTonePopoverFromMenu = function(baseEmoji) {
+window.openTonePopoverFromMenu = function (baseEmoji) {
     if (typeof hideContextMenu === 'function') hideContextMenu();
     const picker = buildPicker();
     const grid = picker.querySelector('.ep-grid');
     const btn = Array.from(grid.querySelectorAll('.ep-emoji-btn')).find(b => b.dataset.baseEmoji === baseEmoji);
     if (!btn) return;
-    
+
     const item = EMOJI_DATA && EMOJI_DATA.find(d => d.c === baseEmoji);
     if (!item) return;
-    
+
     setTimeout(() => {
         showTonePopover(btn, item, (emoji) => {
             if (typeof _pickerCallback === 'function') _pickerCallback(emoji);
@@ -537,16 +708,16 @@ window.openTonePopoverFromMenu = function(baseEmoji) {
 };
 
 function _refreshSkinBtn() {
-    const btn  = document.getElementById('epSkinBtn');
+    const btn = document.getElementById('epSkinBtn');
     if (!btn) return;
     const tone = getStoredTone();
-    const toneEmojis = { '1F3FB':'✋🏻','1F3FC':'✋🏼','1F3FD':'✋🏽','1F3FE':'✋🏾','1F3FF':'✋🏿' };
+    const toneEmojis = { '1F3FB': '✋🏻', '1F3FC': '✋🏼', '1F3FD': '✋🏽', '1F3FE': '✋🏾', '1F3FF': '✋🏿' };
     btn.textContent = tone ? (toneEmojis[tone] || '✋') : '✋';
     btn.title = tone ? ('Skin tone: ' + SKIN_TONE_LABELS[tone]) : 'Choose default skin tone';
 }
 
 function _insertFromBtn(btn) {
-    const char      = btn.dataset.emoji;
+    const char = btn.dataset.emoji;
     const shortcode = btn.dataset.shortcode;
     addRecentEmoji(char, shortcode);
     if (typeof _pickerCallback === 'function') _pickerCallback(char);
@@ -560,9 +731,9 @@ function renderGrid(items) {
         return;
     }
     grid.innerHTML = items.map(item => {
-        const resolved  = resolveEmoji(item);
-        const sc        = Array.isArray(item.s) ? item.s[0] : (item.s || '');
-        const hasVar    = item.v && item.v.length > 0;
+        const resolved = resolveEmoji(item);
+        const sc = Array.isArray(item.s) ? item.s[0] : (item.s || '');
+        const hasVar = item.v && item.v.length > 0;
         return `<button class="ep-emoji-btn${hasVar ? ' has-variants' : ''}"
                         data-emoji="${resolved}"
                         data-base-emoji="${item.c}"
@@ -611,7 +782,7 @@ function renderSearch(query) {
 function openEmojiPicker(triggerEl, callback) {
     const picker = buildPicker();
     _pickerCallback = callback;
-    _selectedTone   = getStoredTone();
+    _selectedTone = getStoredTone();
     positionPicker(picker, triggerEl);
     picker.classList.add('visible');
     document.body.classList.add('emoji-picker-open');
@@ -620,11 +791,14 @@ function openEmojiPicker(triggerEl, callback) {
 
     if (_pickerClose) document.removeEventListener('mousedown', _pickerClose);
     _pickerClose = (e) => {
-        // Don't close the picker when interacting with the context menu or its overlay
-        const ctxMenu    = document.getElementById('contextMenu');
+        // Don't close the picker when interacting with the context menu, its overlay,
+        // or the skin-tone popover (which lives outside the picker DOM).
+        const ctxMenu = document.getElementById('contextMenu');
         const ctxOverlay = document.getElementById('contextMenuOverlay');
-        if (ctxMenu    && ctxMenu.contains(e.target))    return;
+        const tonePop = document.getElementById('emojiTonePopover');
+        if (ctxMenu && ctxMenu.contains(e.target)) return;
         if (ctxOverlay && ctxOverlay.contains(e.target)) return;
+        if (tonePop && tonePop.contains(e.target)) return;
         if (!picker.contains(e.target) && !triggerEl.contains(e.target)) closeEmojiPicker();
     };
     setTimeout(() => document.addEventListener('mousedown', _pickerClose), 0);
@@ -664,18 +838,18 @@ function toggleEmojiPicker(triggerEl, callback) {
 
 function positionPicker(picker, triggerEl) {
     const W = 352, H = 452, M = 8;
-    const r  = triggerEl.getBoundingClientRect();
+    const r = triggerEl.getBoundingClientRect();
     const vw = window.innerWidth;
     const vh = window.innerHeight;
 
-    let top  = r.top - H - M > 0 ? r.top - H - M : r.bottom + M;
+    let top = r.top - H - M > 0 ? r.top - H - M : r.bottom + M;
     let left = r.right - W;
 
-    if (left < M)          left = M;
+    if (left < M) left = M;
     if (left + W > vw - M) left = vw - W - M;
-    if (top  + H > vh - M) top  = vh - H - M;
-    if (top  < M)          top  = M;
+    if (top + H > vh - M) top = vh - H - M;
+    if (top < M) top = M;
 
-    picker.style.top  = top  + 'px';
+    picker.style.top = top + 'px';
     picker.style.left = left + 'px';
 }

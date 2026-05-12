@@ -1683,6 +1683,7 @@ body {
 
 .ep-cat-btn .material-symbols-rounded {
     font-size: 20px;
+    font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
 }
 
 .ep-cat-btn:hover {
@@ -1705,6 +1706,7 @@ body {
 .ep-grid {
     display: grid;
     grid-template-columns: repeat(9, 1fr);
+    align-content: start;
     gap: 2px;
     padding: 6px 8px;
     overflow-y: auto;
@@ -1740,6 +1742,10 @@ body {
     transition: background 0.1s;
     line-height: 1;
     font-family: var(--font-default);
+    user-select: none;
+    -webkit-user-select: none;
+    -ms-user-select: none;
+    -moz-user-select: none;
 }
 
 .ep-emoji-btn:hover {
@@ -1872,9 +1878,14 @@ body {
     justify-content: center;
     font-family: var(--font-default);
     transition: background 0.1s, transform 0.1s;
+    user-select: none;
+    -webkit-user-select: none;
+    -ms-user-select: none;
+    -moz-user-select: none;
 }
 
-.ep-tone-btn:hover {
+.ep-tone-btn:hover,
+.ep-tone-btn.sliding-over {
     background: #2a2a2a;
     transform: scale(1.15);
 }
