@@ -15,7 +15,51 @@
 
 function replaceShortcodes(text) {
     if (!text || typeof EMOJI_MAP === 'undefined') return text;
-    return text.replace(/:([a-zA-Z0-9_+\-]+):/g, (match, code) => EMOJI_MAP[code] || match);
+    
+    // 1. Initial pass for basic shortcodes and tone-suffixed ones (e.g. :wave_tone3:)
+    let replaced = text.replace(/:([a-zA-Z0-9_+\-]+):/g, (match, code) => {
+        if (EMOJI_MAP[code]) return EMOJI_MAP[code];
+        
+        // Handle _toneN suffixes dynamically
+        if (code.includes('_tone')) {
+            const parts = code.split('_tone');
+            const base = parts[0];
+            const toneNum = parts[1];
+            const baseChar = EMOJI_MAP[base];
+            if (baseChar) {
+                const item = (typeof EMOJI_DATA !== 'undefined' ? EMOJI_DATA : []).find(d => d.c === baseChar);
+                if (item && item.v) {
+                    const toneSuffix = '_tone' + toneNum;
+                    const targetTone = Object.keys(TONE_SUFFIX).find(t => TONE_SUFFIX[t] === toneSuffix);
+                    const variant = item.v.find(v => v.t === targetTone);
+                    if (variant) return variant.c;
+                }
+            }
+        }
+        return match;
+    });
+
+    // 2. Handle the pattern :emoji::skin-tone-N: (or EmojiChar + ModifierChar)
+    // We use our lookup map to find the correct variant character from EMOJI_DATA
+    const lookup = _getEmojiLookupMap();
+    const modifierMap = { '\u{1F3FB}': '1F3FB', '\u{1F3FC}': '1F3FC', '\u{1F3FD}': '1F3FD', '\u{1F3FE}': '1F3FE', '\u{1F3FF}': '1F3FF' };
+    
+    replaced = replaced.replace(/(\p{Extended_Pictographic}(?:\uFE0F|\u200d\p{Extended_Pictographic})*)([\u{1F3FB}-\u{1F3FF}])/gu, (match, base, modifier) => {
+        const tone = modifierMap[modifier];
+        const normalized = base.replace(/\uFE0F/g, '');
+        const entry = lookup.get(base) || lookup.get(normalized);
+        
+        if (entry && entry.item && entry.item.v) {
+            // Find the variant that matches this tone
+            const variant = entry.item.v.find(v => v.t === tone);
+            if (variant) return variant.c;
+        }
+        
+        // Fallback: just append if not found in our data
+        return base + modifier;
+    });
+
+    return replaced;
 }
 
 /**
@@ -69,6 +113,28 @@ if (typeof EMOJI_DATA !== 'undefined') {
         }
     });
 }
+
+// ── Regional Indicators (Letter Blocks) ──────────────────────────────────────
+
+function injectRegionalIndicators() {
+    if (typeof EMOJI_DATA === 'undefined' || typeof EMOJI_MAP === 'undefined') return;
+    if (EMOJI_MAP['regional_indicator_a']) return; // Already injected
+
+    for (let i = 0; i < 26; i++) {
+        const char = String.fromCodePoint(0x1F1E6 + i);
+        const letter = String.fromCharCode(97 + i);
+        const shortcode = `regional_indicator_${letter}`;
+        
+        EMOJI_DATA.push({
+            c: char,
+            s: [shortcode],
+            k: 'Symbols'
+        });
+        EMOJI_MAP[shortcode] = char;
+    }
+}
+
+injectRegionalIndicators();
 
 // ── Skin-tone state ───────────────────────────────────────────────────────────
 
@@ -124,6 +190,15 @@ function setEmojiTone(baseChar, tone) {
 }
 function clearIndividualTones() {
     localStorage.removeItem('emessage_individual_tones');
+}
+
+// Inject skin-tone shortcodes into EMOJI_MAP for :skin-tone-N: support
+if (typeof EMOJI_MAP !== 'undefined') {
+    EMOJI_MAP['skin-tone-1'] = '\u{1F3FB}';
+    EMOJI_MAP['skin-tone-2'] = '\u{1F3FC}';
+    EMOJI_MAP['skin-tone-3'] = '\u{1F3FD}';
+    EMOJI_MAP['skin-tone-4'] = '\u{1F3FE}';
+    EMOJI_MAP['skin-tone-5'] = '\u{1F3FF}';
 }
 
 function resolveEmoji(item) {
@@ -365,6 +440,7 @@ function showTonePopover(anchorBtn, baseItem, onChoose, isHolding = false) {
         if (_grid) _grid.scrollTop = _savedScroll;
 
         onChoose(emoji);
+        addRecentEmoji(emoji, btn.dataset.shortcode);
     };
 
     pop.onclick = (e) => {
@@ -378,15 +454,20 @@ function showTonePopover(anchorBtn, baseItem, onChoose, isHolding = false) {
             const btn = target ? target.closest('.ep-tone-btn') : null;
             pop.querySelectorAll('.ep-tone-btn').forEach(b => b.classList.toggle('sliding-over', b === btn));
         };
+        const cleanup = () => {
+            window.removeEventListener('pointermove',   onPointerMove);
+            window.removeEventListener('pointerup',     onPointerUp);
+            window.removeEventListener('pointercancel', cleanup);
+        };
         const onPointerUp = (e) => {
             const target = document.elementFromPoint(e.clientX, e.clientY);
             const btn = target ? target.closest('.ep-tone-btn') : null;
-            window.removeEventListener('pointermove', onPointerMove);
-            window.removeEventListener('pointerup', onPointerUp);
+            cleanup();
             if (btn) handleSelection(btn);
         };
-        window.addEventListener('pointermove', onPointerMove);
-        window.addEventListener('pointerup', onPointerUp);
+        window.addEventListener('pointermove',   onPointerMove);
+        window.addEventListener('pointerup',     onPointerUp);
+        window.addEventListener('pointercancel', cleanup);
     }
 
     // Desktop right-click or mobile long-press on a tone button → context menu
@@ -509,6 +590,7 @@ function buildPicker() {
         const startHold = (e) => {
             if (e.button && e.button !== 0) return;
             _holdOrigin = { x: e.clientX, y: e.clientY };
+            skinBtn.style.touchAction = 'none';
             _holdTimer = setTimeout(() => {
                 _holdTimer = null;
                 _menuOpened = true; // suppress upcoming click
@@ -516,10 +598,14 @@ function buildPicker() {
                 showTonePopover(skinBtn, dummyItem, () => { }, true);
             }, HOLD_MS);
         };
-        const cancelHold = () => { if (_holdTimer) { clearTimeout(_holdTimer); _holdTimer = null; } };
+        const cancelHold = () => { 
+            if (_holdTimer) { clearTimeout(_holdTimer); _holdTimer = null; } 
+            skinBtn.style.touchAction = '';
+        };
 
         skinBtn.addEventListener('pointerdown', startHold);
-        window.addEventListener('pointerup', cancelHold);
+        window.addEventListener('pointerup',     cancelHold);
+        window.addEventListener('pointercancel', cancelHold);
         window.addEventListener('pointermove', (e) => {
             if (!_holdTimer) return;
             if (Math.abs(e.clientX - _holdOrigin.x) > 10 || Math.abs(e.clientY - _holdOrigin.y) > 10) cancelHold();
@@ -549,6 +635,7 @@ function buildPicker() {
         if (!btn || btn.dataset.hasVariants !== '1') return;
 
         _holdOrigin = { x: e.clientX, y: e.clientY };
+        grid.style.touchAction = 'none';
         _holdTimer = setTimeout(() => {
             _holdTimer = null;
             _menuOpened = true;
@@ -566,14 +653,25 @@ function buildPicker() {
         }, HOLD_MS);
     });
 
-    const _cancelHold = () => { if (_holdTimer) { clearTimeout(_holdTimer); _holdTimer = null; } };
-    window.addEventListener('pointerup', _cancelHold);
+    const _cancelHold = () => { 
+        if (_holdTimer) { clearTimeout(_holdTimer); _holdTimer = null; } 
+        grid.style.touchAction = '';
+    };
+    window.addEventListener('pointerup',     _cancelHold);
+    window.addEventListener('pointercancel', _cancelHold);
     window.addEventListener('pointermove', e => {
         if (!_holdTimer) return;
         const dx = e.clientX - _holdOrigin.x;
         const dy = e.clientY - _holdOrigin.y;
         if (Math.sqrt(dx * dx + dy * dy) > HOLD_MOVE_THRESHOLD) _cancelHold();
     });
+
+    // Stop scrolling if we are in the middle of a hold or the popover is open
+    grid.addEventListener('touchmove', e => {
+        if (_holdTimer || (_tonePopover && _tonePopover.classList.contains('visible'))) {
+            e.preventDefault();
+        }
+    }, { passive: false });
 
     grid.addEventListener('click', e => {
         if (_menuOpened) {
@@ -593,7 +691,13 @@ function buildPicker() {
         e.preventDefault();
         e.stopPropagation();
 
-        // Right-click always opens context menu directly on both desktop and mobile
+        const isMobile = window.innerWidth <= 900;
+        const hasVariants = btn.dataset.hasVariants === '1';
+
+        // On mobile, variant emojis should ONLY open the popover (via the hold timer).
+        // The context menu for them is only accessible from the popover variants.
+        if (isMobile && hasVariants) return;
+
         showEmojiContextMenu(e, btn.dataset.emoji, btn.dataset.shortcode);
     });
 
@@ -852,4 +956,321 @@ function positionPicker(picker, triggerEl) {
 
     picker.style.top = top + 'px';
     picker.style.left = left + 'px';
+}
+
+// ── Emoji Details (for Chat Messages) ────────────────────────────────────────
+
+let _emojiMatchRegex = null;
+let _emojiLookupMap = null;
+let _detailsCloseHandler = null;
+let _activeDetailsTarget = null;
+
+function _getEmojiLookupMap() {
+    if (_emojiLookupMap) return _emojiLookupMap;
+    _emojiLookupMap = new Map();
+    const data = (typeof EMOJI_DATA !== 'undefined' ? EMOJI_DATA : []);
+    data.forEach(item => {
+        const baseShortcode = item.s[0];
+        const entry = { item, shortcode: baseShortcode };
+
+        // Map base character
+        const normalized = item.c.replace(/\uFE0F/g, '');
+        if (!_emojiLookupMap.has(item.c)) _emojiLookupMap.set(item.c, entry);
+        if (!_emojiLookupMap.has(normalized)) _emojiLookupMap.set(normalized, entry);
+
+        // Map all variants (skin tones, etc.) with specific tone shortcodes
+        if (item.v && Array.isArray(item.v)) {
+            item.v.forEach(v => {
+                const vShortcode = toneShortcode(baseShortcode, v.t);
+                const vEntry = { item, shortcode: vShortcode };
+                const vNorm = v.c.replace(/\uFE0F/g, '');
+                
+                if (!_emojiLookupMap.has(v.c)) _emojiLookupMap.set(v.c, vEntry);
+                if (!_emojiLookupMap.has(vNorm)) _emojiLookupMap.set(vNorm, vEntry);
+            });
+        }
+    });
+    return _emojiLookupMap;
+}
+
+function _getEmojiMatchRegex() {
+    // This regex matches any emoji sequence (including ZWJ, skin tones, and variation selectors).
+    // It is much more robust than matching against a fixed list of characters and ensures
+    // that complex sequences like families or skin-toned variants stay joined.
+    return /(\p{Extended_Pictographic}(?:\p{Emoji_Modifier}|\uFE0F|\u200d\p{Extended_Pictographic})*)/gu;
+}
+
+/**
+ * Prepares chat message content: escapes HTML, replaces shortcodes, 
+ * and wraps all emojis in interactive spans.
+ */
+function formatMessageContent(text) {
+    if (!text) return '';
+    // 1. Escape HTML (standard utility)
+    let content = typeof escapeHtml === 'function' ? escapeHtml(text) : text;
+    
+    // 2. Expand shortcodes (e.g. :smile: -> 😀)
+    content = replaceShortcodes(content);
+    
+    // 2. Wrap all unicode emojis in interactive spans
+    const re = /(\p{Regional_Indicator}+|\p{Extended_Pictographic}(?:\p{Emoji_Modifier}|\uFE0F|\u200d\p{Extended_Pictographic})*)/gu;
+    const lookup = _getEmojiLookupMap();
+    
+    let actualEmojiCount = 0;
+    let formatted = content.replace(re, (match) => {
+        const cp = match.codePointAt(0);
+        if (cp >= 0x1F1E6 && cp <= 0x1F1FF) {
+            // Process Regional Indicators
+            let output = "";
+            let i = 0;
+            const chars = Array.from(match);
+            while (i < chars.length) {
+                const pair = (chars[i] || '') + (chars[i+1] || '');
+                const entry = pair.length === 4 ? (lookup.get(pair) || lookup.get(pair.replace(/\uFE0F/g, ''))) : null;
+                
+                if (entry) {
+                    output += `<span class="chat-emoji" data-emoji="${pair}" data-shortcode="${entry.shortcode}">${pair}</span>`;
+                    actualEmojiCount++;
+                    i += 2;
+                } else {
+                    const single = chars[i];
+                    const sEntry = lookup.get(single) || lookup.get(single.replace(/\uFE0F/g, ''));
+                    const sc = sEntry ? sEntry.shortcode : '';
+                    output += `<span class="chat-emoji" data-emoji="${single}" data-shortcode="${sc}">${single}</span>`;
+                    actualEmojiCount++;
+                    i += 1;
+                }
+            }
+            return output;
+        }
+
+        actualEmojiCount++;
+        const normalized = match.replace(/\uFE0F/g, '');
+        const entry = lookup.get(match) || lookup.get(normalized);
+        const shortcode = entry ? entry.shortcode : '';
+        return `<span class="chat-emoji" data-emoji="${match}" data-shortcode="${shortcode}">${match}</span>`;
+    });
+
+    // Check if the message is "emoji only" (only emojis and whitespace, up to 27 emojis)
+    const nonEmojiText = content.replace(re, '').trim();
+    const isLarge = (nonEmojiText === '' && actualEmojiCount > 0 && actualEmojiCount <= 27);
+
+    if (isLarge) {
+        return `<div class="large-emoji-wrapper">${formatted}</div>`;
+    }
+    return formatted;
+}
+
+// ── Emoji Tooltip ────────────────────────────────────────────────────────────
+
+let _tooltipEl = null;
+
+function showEmojiTooltip(target, shortcode) {
+    if (!shortcode) return;
+
+    // Suppress tooltip only for the specific emoji that currently has a details card open
+    if (target === _activeDetailsTarget) return;
+
+    if (!_tooltipEl) {
+        _tooltipEl = document.createElement('div');
+        _tooltipEl.className = 'emoji-tooltip';
+        document.body.appendChild(_tooltipEl);
+    }
+    
+    _tooltipEl.textContent = `:${shortcode}:`;
+    _tooltipEl.classList.add('visible');
+    
+    const rect = target.getBoundingClientRect();
+    const tw = _tooltipEl.offsetWidth;
+    const th = _tooltipEl.offsetHeight;
+    
+    let top = rect.top - th - 6;
+    let left = rect.left + (rect.width / 2) - (tw / 2);
+    
+    if (top < 5) top = rect.bottom + 6;
+    if (left < 5) left = 5;
+    if (left + tw > window.innerWidth - 5) left = window.innerWidth - tw - 5;
+    
+    _tooltipEl.style.top = top + 'px';
+    _tooltipEl.style.left = left + 'px';
+}
+
+function hideEmojiTooltip() {
+    if (_tooltipEl) _tooltipEl.classList.remove('visible');
+}
+
+/**
+ * Shows details for a clicked emoji in a message.
+ */
+function showEmojiDetails(e, emojiChar, shortcode) {
+    hideEmojiTooltip(); // Close tooltip on click
+    _activeDetailsTarget = e.target.closest('.chat-emoji');
+    const isMobile = window.innerWidth <= 900;
+    if (isMobile) {
+        // Reuse existing context menu logic for mobile (action sheet)
+        showEmojiContextMenu(e, emojiChar, shortcode);
+        return;
+    }
+    
+    // Desktop: Little floating card
+    let card = document.getElementById('emojiDetailsCard');
+    if (!card) {
+        card = document.createElement('div');
+        card.id = 'emojiDetailsCard';
+        card.className = 'emoji-details-card';
+        document.body.appendChild(card);
+    }
+    
+    card.innerHTML = `
+        <div class="edc-emoji">${emojiChar}</div>
+        <div class="edc-name">:${shortcode}:</div>
+    `;
+    
+    // Temporarily show to calculate dimensions
+    card.style.display = 'flex';
+    card.style.visibility = 'hidden';
+    const cw = card.offsetWidth;
+    const ch = card.offsetHeight;
+    card.style.display = '';
+    card.style.visibility = '';
+    
+    const rect = e.target.getBoundingClientRect();
+    let top = rect.top - ch - 8;
+    let left = rect.left + (rect.width / 2) - (cw / 2);
+    
+    // Boundary check
+    if (top < 10) top = rect.bottom + 8;
+    if (left < 10) left = 10;
+    if (left + cw > window.innerWidth - 10) left = window.innerWidth - cw - 10;
+    
+    card.style.top = top + 'px';
+    card.style.left = left + 'px';
+    card.classList.add('visible');
+    
+    // Click outside to close
+    if (_detailsCloseHandler) document.removeEventListener('mousedown', _detailsCloseHandler);
+    _detailsCloseHandler = (ev) => {
+        if (!card.contains(ev.target)) {
+            card.classList.remove('visible');
+            _activeDetailsTarget = null;
+            document.removeEventListener('mousedown', _detailsCloseHandler);
+            _detailsCloseHandler = null;
+        }
+    };
+    setTimeout(() => document.addEventListener('mousedown', _detailsCloseHandler), 0);
+}
+
+// ── Speech Synthesis Support ────────────────────────────────────────────────
+
+let _supportCanvas = null;
+let _supportedEmojiCache = new Map();
+
+/**
+ * Checks if the system natively supports (can render) an emoji.
+ */
+function isEmojiSupported(emoji) {
+    if (_supportedEmojiCache.has(emoji)) return _supportedEmojiCache.get(emoji);
+    
+    if (!_supportCanvas) {
+        _supportCanvas = document.createElement('canvas');
+        _supportCanvas.width = 24;
+        _supportCanvas.height = 24;
+    }
+    const ctx = _supportCanvas.getContext('2d', { willReadFrequently: true });
+    // Use standard emoji font stack
+    ctx.font = '16px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Android Emoji", "EmojiSymbols", sans-serif';
+    ctx.textBaseline = 'top';
+
+    // Get "tofu" pixels (rendering a character that definitely doesn't exist)
+    ctx.clearRect(0, 0, 24, 24);
+    ctx.fillText('\uFFFF', 0, 0);
+    const tofuData = ctx.getImageData(0, 0, 24, 24).data;
+    const tofuStr = tofuData.toString();
+
+    // Get emoji pixels
+    ctx.clearRect(0, 0, 24, 24);
+    ctx.fillText(emoji, 0, 0);
+    const emojiData = ctx.getImageData(0, 0, 24, 24).data;
+    const emojiStr = emojiData.toString();
+
+    // If pixels are identical to tofu, or if it's completely empty, it's unsupported
+    const supported = (tofuStr !== emojiStr);
+    _supportedEmojiCache.set(emoji, supported);
+    return supported;
+}
+
+/**
+ * Returns a human-friendly name for an emoji, including skin tone descriptions.
+ */
+function getFriendlyEmojiName(entry, match) {
+    if (!entry) return '';
+    // Use the specific shortcode we found (which already has _tone if it was a variant)
+    const baseShortcode = entry.shortcode || '';
+    let name = baseShortcode.split('_tone')[0].replace(/[:_]/g, ' ').trim();
+    
+    // Explicitly check for skin tone modifiers in the Unicode sequence
+    const toneMatch = match.match(/[\u{1F3FB}-\u{1F3FF}]/u);
+    if (toneMatch) {
+        const codepoint = toneMatch[0].codePointAt(0).toString(16).toUpperCase();
+        const toneLabel = SKIN_TONE_LABELS[codepoint] || '';
+        if (toneLabel) {
+            name += ` with ${toneLabel.toLowerCase()} skin tone`;
+        }
+    }
+    
+    return name;
+}
+
+/**
+ * Prepares text for speech synthesis by replacing unsupported emojis 
+ * with their human-friendly names as a fallback.
+ */
+function prepareTextForSpeech(text) {
+    if (!text) return '';
+    
+    // Expand shortcodes first so we're processing real emojis
+    text = replaceShortcodes(text);
+
+    // Match regional indicators (single or pairs) or any pictographic sequence
+    const re = /(\p{Regional_Indicator}+|\p{Extended_Pictographic}(?:\p{Emoji_Modifier}|\uFE0F|\u200d\p{Extended_Pictographic})*)/gu;
+    const lookup = _getEmojiLookupMap();
+    
+    return text.replace(re, (match) => {
+        const cp = match.codePointAt(0);
+        if (cp >= 0x1F1E6 && cp <= 0x1F1FF) {
+            let output = "";
+            let i = 0;
+            const chars = Array.from(match);
+            while (i < chars.length) {
+                const pair = (chars[i] || '') + (chars[i+1] || '');
+                const entry = pair.length === 4 ? (lookup.get(pair) || lookup.get(pair.replace(/\uFE0F/g, ''))) : null;
+                
+                if (entry && isEmojiSupported(pair)) {
+                    // Valid flag supported by system
+                    output += pair;
+                    i += 2;
+                } else {
+                    // Single letter or unsupported flag pair
+                    const char = chars[i];
+                    const charCp = char.codePointAt(0);
+                    if (charCp && charCp >= 0x1F1E6 && charCp <= 0x1F1FF) {
+                        output += " Letter " + String.fromCharCode(65 + (charCp - 0x1F1E6)) + " ";
+                    }
+                    i += 1;
+                }
+            }
+            return output;
+        }
+
+        // If the system knows how to render/speak it, let it use its native name
+        if (isEmojiSupported(match)) return match;
+        
+        // Fallback to our internal data
+        const normalized = match.replace(/\uFE0F/g, '');
+        const entry = lookup.get(match) || lookup.get(normalized);
+        if (entry) {
+            return " " + getFriendlyEmojiName(entry, match) + " ";
+        }
+        return ''; // Skip if completely unknown
+    });
 }

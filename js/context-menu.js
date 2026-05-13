@@ -855,7 +855,8 @@ function speakMessage() {
                 }
                 
                 // Create and speak the message
-                const utterance = new SpeechSynthesisUtterance(messageText);
+                const spokenText = typeof prepareTextForSpeech === 'function' ? prepareTextForSpeech(messageText) : messageText;
+                const utterance = new SpeechSynthesisUtterance(spokenText);
                 utterance.rate = 0.9; // Slightly slower for better clarity
                 utterance.pitch = 1.0;
                 utterance.volume = 0.8;

@@ -521,7 +521,7 @@ function displayConversationMessages(conversationId) {
                         ${statusIndicator}
                     </div>
                     ` : ''}
-                    <div class="message-bubble">${escapeHtml(message.content)}</div>
+                    <div class="message-bubble">${formatMessageContent(message.content)}</div>
                     <div class="message-footer">
                         ${message.incognito ? '<span class="incognito-tag">Incognito</span>' : ''}
                         ${message.error ? `<div class="error-info">${escapeHtml(message.error)}</div>` : ''}
@@ -538,6 +538,37 @@ function displayConversationMessages(conversationId) {
     
     // Scroll to bottom
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    
+    // Add click delegation for emojis in messages
+    messagesContainer.onclick = (e) => {
+        const emojiEl = e.target.closest('.chat-emoji');
+        if (emojiEl) {
+            e.stopPropagation();
+            showEmojiDetails(e, emojiEl.dataset.emoji, emojiEl.dataset.shortcode);
+        }
+    };
+
+    // Add hover delegation for emoji tooltips
+    let emojiHoverTimer = null;
+    messagesContainer.onmouseover = (e) => {
+        const el = e.target.closest('.chat-emoji');
+        if (el) {
+            clearTimeout(emojiHoverTimer);
+            emojiHoverTimer = setTimeout(() => {
+                if (typeof showEmojiTooltip === 'function') {
+                    showEmojiTooltip(el, el.dataset.shortcode);
+                }
+            }, 600); // Show after 600ms hover
+        }
+    };
+    messagesContainer.onmouseout = (e) => {
+        if (e.target.closest('.chat-emoji')) {
+            clearTimeout(emojiHoverTimer);
+            if (typeof hideEmojiTooltip === 'function') {
+                hideEmojiTooltip();
+            }
+        }
+    };
     
     // Add context menu functionality to messages
     setupMessageContextMenus(sortedMessages);
