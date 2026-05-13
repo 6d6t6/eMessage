@@ -797,6 +797,7 @@ body {
 .conversations-list {
     flex: 1;
     overflow-y: scroll;
+    overscroll-behavior: none;
     padding: 10px 0px 10px 8px;
 }
 
@@ -1253,6 +1254,7 @@ body {
 .messages-container {
     flex: 1;
     overflow-y: scroll;
+    overscroll-behavior: none;
     padding: 12px 0 12px 0;
     display: flex;
     flex-direction: column;
@@ -1717,6 +1719,7 @@ body {
     height: 100%;
     scrollbar-width: thin;
     scrollbar-color: #404040 transparent;
+    overscroll-behavior: none;
 }
 
 .ep-grid::-webkit-scrollbar {
