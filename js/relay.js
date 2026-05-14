@@ -141,7 +141,7 @@ function connectRelay(relayUrl) {
         if (!relayConnection) {
             relayConnection = relayState.socket;
         }
-        subscribeToIncognitoMessages(relayState.socket);
+        subscribeToIncognitoMessages(relayState.socket, null, 0);
         if (typeof subscribeToProfiles === 'function') {
             const pubkeys = chatState.conversations.map((conversation) => conversation.recipient);
             subscribeToProfiles(relayState.socket, pubkeys);
@@ -157,6 +157,9 @@ function connectRelay(relayUrl) {
         }
         if (typeof subscribeToIncognitoBackup === 'function') {
             subscribeToIncognitoBackup(relayState.socket);
+        }
+        if (typeof subscribeToReadMarkers === 'function') {
+            subscribeToReadMarkers(relayState.socket);
         }
         if (typeof attemptPendingIncognitoBackup === 'function') {
             attemptPendingIncognitoBackup();
@@ -191,37 +194,23 @@ function handleRelayMessage(data, relayUrl = null) {
     try {
         const message = JSON.parse(data);
         
-        console.log('=== RELAY MESSAGE RECEIVED ===');
-        if (relayUrl) {
-            console.log('Relay:', relayUrl);
-        }
-        console.log('Message type:', message[0]);
-        
         if (message[0] === 'EVENT') {
             const event = message[2];
             
-            console.log('Event details:');
-            console.log('- Event ID:', event.id);
-            console.log('- Kind:', event.kind);
-            console.log('- Pubkey:', event.pubkey.substring(0, 16) + '...');
-            console.log('- Created at:', event.created_at);
-            console.log('- Content length:', event.content?.length);
-            console.log('- Tags:', event.tags);
-            
             // Add event deduplication
             if (processedEventIds.has(event.id)) {
-                console.log('DUPLICATE EVENT - already processed:', event.id);
                 return; // Already processed this event
             }
             addProcessedEventId(event.id);
-            console.log('NEW EVENT - processing:', event.id);
+            
+            Logger.debug('Event received:', event.kind, event.id.substring(0, 8), 'from', relayUrl);
             
             if (event.kind === 0) {
                 try {
                     const metadata = JSON.parse(event.content || '{}');
                     upsertProfileCache(event.pubkey, metadata, event.created_at);
                 } catch (error) {
-                    console.warn('Failed to parse profile metadata:', error);
+                    Logger.warn('Failed to parse profile metadata:', error);
                 }
                 return;
             }
@@ -230,32 +219,28 @@ function handleRelayMessage(data, relayUrl = null) {
                 if (typeof handleIncognitoBackupEvent === 'function') {
                     handleIncognitoBackupEvent(event);
                 }
+                if (typeof handleReadMarkersEvent === 'function') {
+                    handleReadMarkersEvent(event);
+                }
                 return;
             }
             
-            if (event.kind === 4) {
+            if (event.kind === 4 || event.kind === 1059) {
                 // Check if it's an incognito invitation or message
                 const recipientTag = event.tags.find(tag => tag[0] === 'p');
                 const isForUs = recipientTag && recipientTag[1] === userKeys.publicKey;
                 
-                console.log('=== KIND 4 EVENT ROUTING ===');
-                console.log('Event pubkey:', event.pubkey.substring(0, 16) + '...');
-                console.log('Recipient tag:', recipientTag ? recipientTag[1].substring(0, 16) + '...' : 'none');
-                console.log('Our pubkey:', userKeys.publicKey.substring(0, 16) + '...');
-                console.log('Is for us:', isForUs);
-                console.log('Has conversations:', incognitoState.conversations.size > 0);
-                
                 if (isForUs) {
-                            // First, check if this is from a known conversation identity (highest priority)
-                            const isFromConversationIdentity = Array.from(incognitoState.conversations.values())
-                                .some(conv => conv.conversationPubkey === event.pubkey);
-                            
-                            if (isFromConversationIdentity) {
-                                console.log('>>> Processing as incognito message (from conversation identity)');
-                                handleIncognitoMessage(event);
-                            } else if (incognitoState.conversations.size > 0) {
-                                // We have conversations, so this is likely a message
-                        console.log('>>> Processing as incognito message (has conversations)');
+                    // First, check if this is from a known conversation identity (highest priority)
+                    const isFromConversationIdentity = Array.from(incognitoState.conversations.values())
+                        .some(conv => conv.conversationPubkey === event.pubkey);
+                    
+                    if (isFromConversationIdentity) {
+                        Logger.debug('Processing as incognito message (from conversation identity)');
+                        handleIncognitoMessage(event);
+                    } else if (incognitoState.conversations.size > 0) {
+                        // We have conversations, so this is likely a message
+                        Logger.debug('Processing as incognito message (has conversations)');
                         handleIncognitoMessage(event);
                     } else {
                         // Check if we have a pending invitation for this sender
@@ -263,11 +248,11 @@ function handleRelayMessage(data, relayUrl = null) {
                             .some(inv => inv.senderPubkey === event.pubkey);
                         
                         if (hasPendingInvitation) {
-                            console.log('>>> Processing as incognito message (has pending invitation)');
+                            Logger.debug('Processing as incognito message (has pending invitation)');
                             handleIncognitoMessage(event);
                         } else {
                             // No conversations yet, likely an invitation
-                            console.log('>>> Processing as invitation (no conversations)');
+                            Logger.debug('Processing as invitation (no conversations)');
                             handleIncognitoInvitation(event);
                         }
                     }
@@ -275,36 +260,52 @@ function handleRelayMessage(data, relayUrl = null) {
                     // Check if it's an incognito message from a conversation identity
                     // Only process if we have active conversations to reduce spam
                     if (incognitoState.conversations.size > 0) {
-                        console.log('>>> Processing incognito message from:', event.pubkey.substring(0, 16) + '...');
-                        console.log('>>> Available conversation pubkeys:');
-                        for (const [recipient, data] of incognitoState.conversations) {
-                            console.log('   - Conv with', recipient.substring(0, 16) + '... has pubkey:', data.conversationPubkey?.substring(0, 16) + '...');
-                        }
                         handleIncognitoMessage(event);
-                    } else {
-                        console.log('>>> Ignoring message - no active conversations');
                     }
-                    // Silently ignore messages when no active conversations
                 }
-            } else {
-                console.log('>>> Ignoring non-kind-4 event');
             }
         } else if (message[0] === 'OK') {
-            console.log('=== RELAY OK RESPONSE ===');
-            console.log('Event ID:', message[1]);
-            console.log('Accepted:', message[2]);
-            console.log('Message:', message[3] || 'no message');
             const eventId = message[1];
             const accepted = !!message[2];
-            const reason = message[3] || 'Unknown error';
+            const reason = message[3] || 'no reason';
+            
+            if (accepted) {
+                Logger.debug('Relay accepted event:', eventId, 'from', relayUrl);
+            } else {
+                const health = relayHealth.get(relayUrl) || {};
+                if (reason && reason.toLowerCase().includes('pow:')) {
+                    Logger.warn(`Relay ${relayUrl} requires Proof of Work (${reason}). Future Kind 4 events will skip this relay.`);
+                    health.powRequired = true;
+                    relayHealth.set(relayUrl, health);
+                } else if (reason && reason.toLowerCase().includes('rate-limited')) {
+                    Logger.warn(`Relay ${relayUrl} is rate-limiting your events. Increasing outbox delay...`);
+                    health.lastRateLimit = Date.now();
+                    relayHealth.set(relayUrl, health);
+                    globalQueueDelay = Math.min(MAX_QUEUE_DELAY, globalQueueDelay + 2000);
+                } else {
+                    Logger.warn('Relay REJECTED event:', eventId, 'Reason:', reason, 'from', relayUrl);
+                }
+            }
             updateEventDeliveryStatus(eventId, relayUrl, accepted, reason);
         } else if (message[0] === 'NOTICE') {
-            console.log('=== RELAY NOTICE ===');
-            console.log('Notice:', message[1]);
+            Logger.info('Relay NOTICE:', message[1], 'from', relayUrl);
         } else if (message[0] === 'EOSE') {
             const subId = message[1];
             relayConnections.forEach((state) => {
                 if (state.socket && state.socket.readyState === WebSocket.OPEN && state.incognitoSubId === subId) {
+                    Logger.debug('EOSE received for subscription:', subId, 'on', state.url);
+                    
+                    // Trigger next sync layer if applicable
+                    if (state.syncLayer === 0) {
+                        Logger.info('24h sync complete, starting 30d background sync on', state.url);
+                        subscribeToIncognitoMessages(state.socket, null, 1);
+                    } else if (state.syncLayer === 1) {
+                        Logger.info('30d sync complete, starting 1y deep sync on', state.url);
+                        subscribeToIncognitoMessages(state.socket, null, 2);
+                    } else {
+                        Logger.info('Full 1y deep sync complete on', state.url);
+                    }
+
                     if (typeof retryPendingMessages === 'function') {
                         retryPendingMessages();
                     }
@@ -313,15 +314,9 @@ function handleRelayMessage(data, relayUrl = null) {
                     }
                 }
             });
-        } else {
-            console.log('=== OTHER RELAY MESSAGE ===');
-            console.log('Type:', message[0]);
-            console.log('Full message:', message);
         }
     } catch (error) {
-        console.error('=== ERROR HANDLING RELAY MESSAGE ===');
-        console.error('Error handling relay message:', error);
-        console.error('Raw data:', data);
+        Logger.error('Error handling relay message:', error);
     }
 }
 
@@ -387,12 +382,38 @@ function updateEventDeliveryStatus(eventId, relayUrl, accepted, reason) {
             showNotification(`Message failed: ${reason}`, 'error');
         }
         updateMessageStatus(eventId, 'failed', reason);
+        if (typeof saveMessageSendingStatus === 'function') {
+            saveMessageSendingStatus();
+        }
         return;
     }
     
     status.status = 'pending';
     status.error = reason;
     messageSendingStatus.set(eventId, status);
+    if (typeof saveMessageSendingStatus === 'function') {
+        saveMessageSendingStatus();
+    }
+}
+
+function resumePendingSends() {
+    if (!messageSendingStatus || messageSendingStatus.size === 0) return;
+    
+    Logger.info('Resuming pending sends from outbox...');
+    let resumedCount = 0;
+    
+    for (const [eventId, status] of messageSendingStatus) {
+        if (status.status === 'pending' && status.event) {
+            // Re-queue to relays
+            Logger.debug('Re-queueing pending message:', eventId);
+            sendToRelays(JSON.stringify(['EVENT', status.event]));
+            resumedCount++;
+        }
+    }
+    
+    if (resumedCount > 0) {
+        Logger.info(`Successfully re-queued ${resumedCount} pending messages`);
+    }
 }
 
 function ensureRelayEnabled(relayUrl) {
@@ -418,115 +439,149 @@ function ensureRelayEnabled(relayUrl) {
     return normalized;
 }
 
-function getIncognitoHistorySince() {
-    const fallbackSeconds = 30 * 24 * 60 * 60;
+function getIncognitoHistorySince(layer = 0) {
     const nowSeconds = Math.floor(Date.now() / 1000);
-    let since = nowSeconds - fallbackSeconds;
-    let earliestMs = null;
-
-    if (chatState && Array.isArray(chatState.conversations)) {
-        chatState.conversations.forEach((conversation) => {
-            const candidates = [conversation.lastReadTime, conversation.lastMessageTime]
-                .filter((value) => typeof value === 'number' && value > 0);
-            candidates.forEach((value) => {
-                if (earliestMs === null || value < earliestMs) {
-                    earliestMs = value;
-                }
-            });
-        });
+    
+    switch (layer) {
+        case 0: // 24 hours
+            return nowSeconds - (24 * 60 * 60);
+        case 1: // 30 days
+            return nowSeconds - (30 * 24 * 60 * 60);
+        case 2: // 1 year
+        default:
+            return nowSeconds - (365 * 24 * 60 * 60);
     }
+}
 
-    if (earliestMs) {
-        since = Math.floor(earliestMs / 1000) - 300;
+let isDeepSyncing = false;
+
+function triggerDeepSync() {
+    if (isDeepSyncing) {
+        showNotification('Sync already in progress...', 'info');
+        return;
     }
     
-    if (incognitoState && incognitoState.conversations) {
-        incognitoState.conversations.forEach((data) => {
-            if (data && typeof data.createdAt === 'number') {
-                const createdMs = data.createdAt * 1000;
-                if (earliestMs === null || createdMs < earliestMs) {
-                    earliestMs = createdMs;
-                }
-            }
-        });
-        if (earliestMs) {
-            since = Math.floor(earliestMs / 1000) - 300;
-        }
+    isDeepSyncing = true;
+    if (typeof clearSyncCache === 'function') {
+        clearSyncCache();
     }
-
-    return Math.max(0, since);
+    
+    // Force a 1-year history fetch
+    const forceSince = Math.floor(Date.now() / 1000) - (365 * 24 * 60 * 60);
+    subscribeToIncognitoMessages(null, forceSince);
+    showNotification('Deep sync initiated (1 year lookback)', 'success');
+    
+    // Allow re-sync after 10 seconds
+    setTimeout(() => {
+        isDeepSyncing = false;
+    }, 10000);
 }
 
 function buildIncognitoSubscriptionFilters(since) {
     const filters = [];
-    const incomingAuthors = new Set();
-    const outgoingAuthors = new Set();
+    const allIdentities = new Set();
     
     if (incognitoState && incognitoState.conversations) {
         incognitoState.conversations.forEach((data) => {
-            if (data.conversationPubkey) {
-                incomingAuthors.add(data.conversationPubkey);
-            }
+            if (data.conversationPubkey) allIdentities.add(data.conversationPubkey);
             if (data.recipientReplyIdentity && data.recipientReplyIdentity.publicKey) {
-                incomingAuthors.add(data.recipientReplyIdentity.publicKey);
+                allIdentities.add(data.recipientReplyIdentity.publicKey);
             }
             if (data.conversationIdentity && data.conversationIdentity.publicKey) {
-                outgoingAuthors.add(data.conversationIdentity.publicKey);
+                allIdentities.add(data.conversationIdentity.publicKey);
+            }
+            if (data.senderIdentity && data.senderIdentity.publicKey) {
+                allIdentities.add(data.senderIdentity.publicKey);
             }
         });
     }
-    
+
+    // Always fetch messages sent TO our main pubkey
     if (userKeys && userKeys.publicKey) {
         filters.push({
-            kinds: [4],
+            kinds: [4, 1059], // Fetch both legacy and standard wraps
             '#p': [userKeys.publicKey],
             since,
-            limit: 200
+            limit: 5000
         });
     }
     
-    if (incomingAuthors.size) {
-        filters.push({
-            kinds: [4],
-            authors: Array.from(incomingAuthors),
-            since,
-            limit: 200
-        });
-    }
-    
-    if (outgoingAuthors.size) {
-        filters.push({
-            kinds: [4],
-            authors: Array.from(outgoingAuthors),
-            since,
-            limit: 200
-        });
+    // Fetch messages FROM all our conversation identities (history sync)
+    // AND messages FROM their conversation identities (incoming)
+    if (allIdentities.size > 0) {
+        const identityArray = Array.from(allIdentities);
+        const CHUNK_SIZE = 50; // Some relays limit the number of authors in a single filter
+        
+        for (let i = 0; i < identityArray.length; i += CHUNK_SIZE) {
+            const chunk = identityArray.slice(i, i + CHUNK_SIZE);
+            filters.push({
+                kinds: [4, 1059],
+                authors: chunk,
+                since,
+                limit: 5000
+            });
+            
+            // Also explicitly check if any of these identities received messages directed to them
+            filters.push({
+                kinds: [4],
+                '#p': chunk,
+                since,
+                limit: 5000
+            });
+        }
     }
     
     return filters;
 }
 
-// Subscribe to incognito messages (listen for messages from other people's conversation identities)
-function subscribeToIncognitoMessages(socket) {
-    if (!socket || socket.readyState !== WebSocket.OPEN) {
+// Track recent subscriptions to avoid hammering
+let subscriptionDebounceTimer = null;
+const SUBSCRIPTION_COOLDOWN_MS = 2000;
+
+function subscribeToIncognitoMessages(socket = null, forcedSince = null, layer = 0) {
+    if (socket && socket.readyState !== WebSocket.OPEN) {
         return;
     }
     
-    console.log('Subscribing to incognito messages...');
-    const since = getIncognitoHistorySince();
+    // If no socket provided, subscribe on all connected relays with a debounce
+    if (!socket) {
+        if (subscriptionDebounceTimer) {
+            clearTimeout(subscriptionDebounceTimer);
+        }
+        subscriptionDebounceTimer = setTimeout(() => {
+            subscriptionDebounceTimer = null;
+            const connected = getConnectedRelays();
+            if (connected.length > 0) {
+                Logger.info(`Starting automatic progressive sync (Layer ${layer}) on ${connected.length} relays...`);
+                connected.forEach(state => {
+                    subscribeToIncognitoMessages(state.socket, forcedSince, layer);
+                });
+            }
+        }, 1000); // 1-second debounce for global refreshes
+        return;
+    }
+
+    // Rate limit subscriptions per socket (skip if forcedSince or layered sync is provided)
+    const state = Array.from(relayConnections.values()).find(s => s.socket === socket);
+    if (!forcedSince && layer === 0 && state && state.lastSubTime && (Date.now() - state.lastSubTime < SUBSCRIPTION_COOLDOWN_MS)) {
+        return;
+    }
+    
+    const since = forcedSince || getIncognitoHistorySince(layer);
+    Logger.info(`Subscribing to Layer ${layer} history (${formatTimestamp(since)}) on ${state ? state.url : 'relay'}`);
+    
     const filters = buildIncognitoSubscriptionFilters(since);
     if (!filters.length) {
         return;
     }
     
-    const subscriptionId = 'incognito_' + Date.now();
-    if (relayConnections) {
-        relayConnections.forEach((state) => {
-            if (state.socket === socket && state.incognitoSubId) {
-                socket.send(JSON.stringify(['CLOSE', state.incognitoSubId]));
-                state.incognitoSubId = null;
-            }
-        });
+    const subscriptionId = 'incognito_' + Math.random().toString(36).substring(2, 10);
+    
+    if (state && state.incognitoSubId) {
+        try {
+            socket.send(JSON.stringify(['CLOSE', state.incognitoSubId]));
+        } catch (e) {}
+        state.incognitoSubId = null;
     }
     
     const subscribeMessage = JSON.stringify([
@@ -536,12 +591,11 @@ function subscribeToIncognitoMessages(socket) {
     ]);
     
     socket.send(subscribeMessage);
-    relayConnections.forEach((state) => {
-        if (state.socket === socket) {
-            state.incognitoSubId = subscriptionId;
-        }
-    });
-    console.log('Subscribed to incognito messages with targeted filters');
+    if (state) {
+        state.incognitoSubId = subscriptionId;
+        state.syncLayer = layer;
+        state.lastSubTime = Date.now();
+    }
 }
 
 // Send a message to the relay
@@ -572,7 +626,7 @@ async function sendMessage() {
     
     try {
         // Always send incognito message
-        console.log('Sending incognito message to:', recipientPubkey);
+        Logger.info('Sending incognito message to:', recipientPubkey);
         await sendIncognitoMessage(recipientPubkey, messageText);
         
         // Clear the message input
@@ -585,17 +639,80 @@ async function sendMessage() {
     }
 }
 
+const eventQueue = [];
+let isProcessingQueue = false;
+let globalQueueDelay = 1500; // Starting delay
+const MAX_QUEUE_DELAY = 10000; // Max 10 seconds
+const relayHealth = new Map(); // relayUrl -> { lastRateLimit: timestamp, powRequired: boolean }
+
+async function processEventQueue() {
+    if (isProcessingQueue || eventQueue.length === 0) return;
+    isProcessingQueue = true;
+    
+    while (eventQueue.length > 0) {
+        const payload = eventQueue.shift();
+        const connected = getConnectedRelays();
+        
+        if (connected.length > 0) {
+            connected.forEach((state) => {
+                const health = relayHealth.get(state.url) || {};
+                
+                // Skip if relay requires PoW and we are just syncing (Kind 4)
+                if (health.powRequired) {
+                    Logger.debug('Skipping EVENT send to restricted PoW relay:', state.url);
+                    return;
+                }
+                
+                // Skip if recently rate-limited
+                if (health.lastRateLimit && (Date.now() - health.lastRateLimit < 30000)) {
+                    Logger.debug('Skipping EVENT send to rate-limited relay:', state.url);
+                    return;
+                }
+
+                try {
+                    state.socket.send(payload);
+                } catch (error) {
+                    Logger.error('Failed sending queued event to relay:', state.url, error);
+                }
+            });
+        }
+        
+        // Wait before sending next event
+        await new Promise(resolve => setTimeout(resolve, globalQueueDelay));
+        
+        // Slowly recover delay if no recent rate-limits
+        if (globalQueueDelay > 1500) {
+            globalQueueDelay -= 100;
+        }
+    }
+    
+    isProcessingQueue = false;
+}
+
 function sendToRelays(payload) {
+    try {
+        const message = JSON.parse(payload);
+        if (message[0] === 'EVENT') {
+            // Queue events to avoid rate-limiting
+            eventQueue.push(payload);
+            processEventQueue();
+            return;
+        }
+    } catch (e) {
+        // If not JSON or not an EVENT, just send directly
+    }
+
     const connected = getConnectedRelays();
     if (!connected.length) {
-        throw new Error('No relay connections available');
+        Logger.debug('No relay connections available for direct send');
+        return;
     }
     
     connected.forEach((state) => {
         try {
             state.socket.send(payload);
         } catch (error) {
-            console.error('Failed sending to relay:', state.url, error);
+            Logger.error('Failed sending directly to relay:', state.url, error);
         }
     });
 }
@@ -696,3 +813,4 @@ function renderRelayList() {
         relaySummary.textContent = `Connected ${connectedCount}/${enabledCount} enabled relays`;
     }
 }
+

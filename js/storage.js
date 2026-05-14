@@ -18,7 +18,7 @@ function saveChatState() {
         };
         localStorage.setItem(getUserScopedStorageKey('chatState'), JSON.stringify(stateToSave));
     } catch (error) {
-        console.error('Error saving chat state:', error);
+        Logger.error('Error saving chat state:', error);
     }
 }
 
@@ -85,9 +85,9 @@ function initializeChatState() {
                 }
             });
             
-            console.log('Chat state loaded and deduplicated');
+            Logger.debug('Chat state loaded and deduplicated');
         } catch (error) {
-            console.error('Error loading chat state:', error);
+            Logger.error('Error loading chat state:', error);
         }
     }
 }
@@ -99,7 +99,7 @@ function saveProfileState() {
     try {
         localStorage.setItem(getUserScopedStorageKey('profileState'), JSON.stringify(profileState));
     } catch (error) {
-        console.error('Error saving profile state:', error);
+        Logger.error('Error saving profile state:', error);
     }
 }
 
@@ -128,7 +128,7 @@ function loadProfileState() {
             }
         }
     } catch (error) {
-        console.error('Error loading profile state:', error);
+        Logger.error('Error loading profile state:', error);
     }
 }
 
@@ -143,7 +143,7 @@ function saveProfileCache() {
         });
         localStorage.setItem(getUserScopedStorageKey('profileCache'), JSON.stringify(cacheObj));
     } catch (error) {
-        console.error('Error saving profile cache:', error);
+        Logger.error('Error saving profile cache:', error);
     }
 }
 
@@ -156,7 +156,7 @@ function loadProfileCache() {
             profileCache = new Map(Object.entries(parsed || {}));
         }
     } catch (error) {
-        console.error('Error loading profile cache:', error);
+        Logger.error('Error loading profile cache:', error);
     }
 }
 
@@ -166,7 +166,7 @@ function saveRelaySettings() {
     try {
         localStorage.setItem(getUserScopedStorageKey('relaySettings'), JSON.stringify(relaySettings));
     } catch (error) {
-        console.error('Error saving relay settings:', error);
+        Logger.error('Error saving relay settings:', error);
     }
 }
 
@@ -195,7 +195,7 @@ function loadRelaySettings() {
             relaySettings.relays = relaySettings.relays.filter((relay) => !DEPRECATED_RELAYS.includes(relay.url));
         }
     } catch (error) {
-        console.error('Error loading relay settings:', error);
+        Logger.error('Error loading relay settings:', error);
     }
 }
 
@@ -229,10 +229,10 @@ function saveIncognitoState() {
             disposableKeys: Object.fromEntries(incognitoState.disposableKeys)
         };
         
-        console.log('Saving incognito state with conversations:', Object.keys(conversationsObj));
+        Logger.debug('Saving incognito state with conversations:', Object.keys(conversationsObj));
         for (const [key, value] of Object.entries(conversationsObj)) {
-            console.log('Saving conversation for:', key.substring(0, 16) + '...');
-            console.log('- conversationPubkey:', value.conversationPubkey ? value.conversationPubkey.substring(0, 16) + '...' : 'none');
+            Logger.debug('Saving conversation for:', key.substring(0, 16) + '...');
+            Logger.debug('- conversationPubkey:', value.conversationPubkey ? value.conversationPubkey.substring(0, 16) + '...' : 'none');
         }
         
         localStorage.setItem(getUserScopedStorageKey('incognitoState'), JSON.stringify(data));
@@ -240,7 +240,7 @@ function saveIncognitoState() {
             scheduleIncognitoBackup();
         }
     } catch (error) {
-        console.error('Error saving incognito state:', error);
+        Logger.error('Error saving incognito state:', error);
     }
 }
 
@@ -256,11 +256,11 @@ function initializeIncognitoState() {
             
             // Restore conversations and keys
             if (data.conversations) {
-                console.log('Loading conversations from storage:', Object.keys(data.conversations));
+                Logger.debug('Loading conversations from storage:', Object.keys(data.conversations));
                 const conversationsMap = new Map();
                 for (const [key, value] of Object.entries(data.conversations)) {
-                    console.log('Loading conversation for:', key.substring(0, 16) + '...');
-                    console.log('- conversationPubkey:', value.conversationPubkey ? value.conversationPubkey.substring(0, 16) + '...' : 'none');
+                    Logger.debug('Loading conversation for:', key.substring(0, 16) + '...');
+                    Logger.debug('- conversationPubkey:', value.conversationPubkey ? value.conversationPubkey.substring(0, 16) + '...' : 'none');
                     
                     conversationsMap.set(key, {
                         ...value,
@@ -289,9 +289,9 @@ function initializeIncognitoState() {
             saveIncognitoState();
         }
         
-        console.log('Incognito state initialized');
+        Logger.debug('Incognito state initialized');
     } catch (error) {
-        console.error('Error initializing incognito state:', error);
+        Logger.error('Error initializing incognito state:', error);
         // Reset state on error
         incognitoState.seed = bytesToHex(window.NostrTools.generateSecretKey());
         incognitoState.conversationCounter = 0;
@@ -308,7 +308,7 @@ function loadStoredMessages() {
             updateMessagesDisplay();
         }
     } catch (error) {
-        console.error('Error loading stored messages:', error);
+        Logger.error('Error loading stored messages:', error);
         receivedMessages = [];
     }
 }
@@ -320,8 +320,14 @@ function saveMessages() {
     try {
         localStorage.setItem(getUserScopedStorageKey('receivedMessages'), JSON.stringify(receivedMessages));
     } catch (error) {
-        console.error('Error saving messages:', error);
+        Logger.error('Error saving messages:', error);
     }
+}
+
+function clearSyncCache() {
+    processedEventIds.clear();
+    processedMessageIds.clear();
+    Logger.info('Sync cache cleared for deep fetch');
 }
 
 // Clear all storage
@@ -381,4 +387,32 @@ function clearStorage() {
     updateConversationsDisplay();
     updateStatus();
     showNotification('Storage cleared!', 'info');
-} 
+}
+
+function saveMessageSendingStatus() {
+    if (!userKeys) return;
+    try {
+        // Only save pending or recently failed messages to keep storage small
+        const data = Array.from(messageSendingStatus.entries())
+            .filter(([_, status]) => status.status === 'pending' || status.status === 'failed')
+            .map(([id, status]) => [id, { ...status, retryTimer: null }]);
+        localStorage.setItem(getUserScopedStorageKey('messageSendingStatus'), JSON.stringify(data));
+    } catch (e) {
+        Logger.error('Error saving outbox status:', e);
+    }
+}
+
+function loadMessageSendingStatus() {
+    const stored = localStorage.getItem(getUserScopedStorageKey('messageSendingStatus'));
+    if (stored) {
+        try {
+            const data = JSON.parse(stored);
+            data.forEach(([id, status]) => {
+                messageSendingStatus.set(id, status);
+            });
+            Logger.debug(`Loaded ${data.length} messages into outbox queue`);
+        } catch (e) {
+            Logger.error('Error loading outbox status:', e);
+        }
+    }
+}

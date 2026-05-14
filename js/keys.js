@@ -69,8 +69,10 @@ function generateKeys() {
         
         // Add context menus to key displays
         setupKeyContextMenus();
+
+        return { nsec: nsecEncoded, npub: npubEncoded };
     } catch (error) {
-        console.error('Error generating keys:', error);
+        Logger.error('Error generating keys:', error);
         showNotification('Error generating keys: ' + error.message, 'error');
     }
 }

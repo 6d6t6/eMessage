@@ -727,7 +727,7 @@ function clearMessages() {
 
 // Update message status in the UI
 function updateMessageStatus(eventId, status, error = null) {
-    console.log('Updating message status:', eventId, status, error);
+    Logger.debug('Updating message status:', eventId, status, error);
     
     // Find the message by wrapper event ID in all conversations
     for (const [conversationId, messages] of chatState.messages) {
@@ -747,7 +747,7 @@ function updateMessageStatus(eventId, status, error = null) {
         }
     }
     
-    console.log('Message not found for status update:', eventId);
+    Logger.debug('Message not found for status update:', eventId);
 }
 
 // Generic swipe back utility for mobile

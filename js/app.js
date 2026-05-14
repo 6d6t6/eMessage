@@ -5,6 +5,7 @@ let appBootstrapped = false;
 function bootstrapApp() {
     if (appBootstrapped) return;
     appBootstrapped = true;
+    document.body.classList.add('app-bootstrapped');
     
     initializeIncognitoState();
     initializeChatState();
@@ -46,8 +47,19 @@ function bootstrapApp() {
     }
     
     if (userKeys) {
+        if (typeof loadMessageSendingStatus === 'function') {
+            loadMessageSendingStatus();
+        }
+        
         setTimeout(() => {
             connectRelays();
+            
+            // Resume any pending sends after connections are established
+            setTimeout(() => {
+                if (typeof resumePendingSends === 'function') {
+                    resumePendingSends();
+                }
+            }, 3000);
         }, 1000);
     }
 
@@ -204,7 +216,7 @@ document.addEventListener('DOMContentLoaded', function() {
 // Legacy gift wrap functions (kept for compatibility)
 async function handleGiftWrapEvent(event) {
     try {
-        console.log('Received gift wrap event:', event);
+        Logger.debug('Received gift wrap event:', event);
         
         // Check if this gift wrap is for us
         const recipientTag = event.tags.find(tag => tag[0] === 'p');
@@ -229,7 +241,7 @@ async function handleGiftWrapEvent(event) {
             }
         }
     } catch (error) {
-        console.error('Error handling gift wrap event:', error);
+        Logger.error('Error handling gift wrap event:', error);
         showNotification('Error decrypting message: ' + error.message, 'error');
     }
 }
@@ -237,7 +249,7 @@ async function handleGiftWrapEvent(event) {
 // REAL NIP-17 Gift Wrap Unwrapping with REAL NIP-44
 async function unwrapGiftWrap(event) {
     try {
-        console.log('Unwrapping gift wrap with REAL NIP-44...');
+        Logger.debug('Unwrapping gift wrap with REAL NIP-44...');
         
         // Decrypt the gift wrap content using REAL NIP-44
         const decryptedContent = await decryptGiftWrapContent(event.content, event.pubkey);
@@ -257,7 +269,7 @@ async function unwrapGiftWrap(event) {
         
         return null;
     } catch (error) {
-        console.error('Error unwrapping gift wrap:', error);
+        Logger.error('Error unwrapping gift wrap:', error);
         return null;
     }
 }
@@ -265,7 +277,7 @@ async function unwrapGiftWrap(event) {
 // REAL NIP-17 Gift Wrap Creation with REAL NIP-44
 async function createGiftWrap(originalMessage, recipientPubkey) {
     try {
-        console.log('Creating REAL gift wrap with REAL NIP-44 encryption...');
+        Logger.debug('Creating REAL gift wrap with REAL NIP-44 encryption...');
         
         // Create the rumor (the original message)
         const rumor = {
@@ -296,75 +308,75 @@ async function createGiftWrap(originalMessage, recipientPubkey) {
         // Sign the gift wrap event
         const signedGiftWrap = await signNostrEvent(giftWrapEvent);
         
-        console.log('REAL gift wrap created successfully!');
+        Logger.debug('REAL gift wrap created successfully!');
         return signedGiftWrap;
     } catch (error) {
-        console.error('Error creating gift wrap:', error);
+        Logger.error('Error creating gift wrap:', error);
         throw error;
     }
 }
 
 // Test functions for debugging
 function testIncognitoMessage() {
-    console.log('=== TESTING INCOGNITO MESSAGE SENDING ===');
+    Logger.debug('=== TESTING INCOGNITO MESSAGE SENDING ===');
     
     if (!userKeys) {
-        console.error('No user keys available');
+        Logger.error('No user keys available');
         return;
     }
     
     // Get the recipient pubkey from the input
     const recipientPubkey = document.getElementById('testRecipientInput')?.value.trim();
     if (!recipientPubkey) {
-        console.error('No recipient pubkey entered');
+        Logger.error('No recipient pubkey entered');
         return;
     }
     
     const messageText = 'Test message from ' + new Date().toISOString();
-    console.log('Sending test message:', messageText);
-    console.log('To recipient:', recipientPubkey);
+    Logger.debug('Sending test message:', messageText);
+    Logger.debug('To recipient:', recipientPubkey);
     
     // Send the message
     sendIncognitoMessage(recipientPubkey, messageText);
 }
 
 function testDecryption(encryptedContent, senderPubkey) {
-    console.log('=== TESTING DECRYPTION ===');
-    console.log('Encrypted content:', encryptedContent);
-    console.log('Sender pubkey:', senderPubkey);
+    Logger.debug('=== TESTING DECRYPTION ===');
+    Logger.debug('Encrypted content:', encryptedContent);
+    Logger.debug('Sender pubkey:', senderPubkey);
     
     decryptGiftWrapContent(encryptedContent, senderPubkey).then(decrypted => {
-        console.log('Decryption result:', decrypted);
+        Logger.debug('Decryption result:', decrypted);
         if (decrypted) {
             try {
                 const parsed = JSON.parse(decrypted);
-                console.log('Parsed message:', parsed);
+                Logger.debug('Parsed message:', parsed);
             } catch (e) {
-                console.log('Could not parse as JSON:', e);
+                Logger.debug('Could not parse as JSON:', e);
             }
         }
     });
 }
 
 function testConversationMatching(eventPubkey) {
-    console.log('=== TESTING CONVERSATION MATCHING ===');
-    console.log('Event pubkey:', eventPubkey);
-    console.log('Number of conversations:', incognitoState.conversations.size);
+    Logger.debug('=== TESTING CONVERSATION MATCHING ===');
+    Logger.debug('Event pubkey:', eventPubkey);
+    Logger.debug('Number of conversations:', incognitoState.conversations.size);
     
     for (const [recipient, data] of incognitoState.conversations) {
-        console.log('Conversation with:', recipient);
-        console.log('- Conversation pubkey:', data.conversationPubkey);
-        console.log('- Conversation identity:', data.conversationIdentity ? data.conversationIdentity.publicKey : 'none');
-        console.log('- Sender identity:', data.senderIdentity ? data.senderIdentity.publicKey : 'none');
-        console.log('- Match with event pubkey:', data.conversationPubkey === eventPubkey);
-        console.log('---');
+        Logger.debug('Conversation with:', recipient);
+        Logger.debug('- Conversation pubkey:', data.conversationPubkey);
+        Logger.debug('- Conversation identity:', data.conversationIdentity ? data.conversationIdentity.publicKey : 'none');
+        Logger.debug('- Sender identity:', data.senderIdentity ? data.senderIdentity.publicKey : 'none');
+        Logger.debug('- Match with event pubkey:', data.conversationPubkey === eventPubkey);
+        Logger.debug('---');
     }
 }
 
 function testProcessMessage(eventPubkey, encryptedContent) {
-    console.log('=== TESTING MESSAGE PROCESSING ===');
-    console.log('Event pubkey:', eventPubkey);
-    console.log('Encrypted content:', encryptedContent);
+    Logger.debug('=== TESTING MESSAGE PROCESSING ===');
+    Logger.debug('Event pubkey:', eventPubkey);
+    Logger.debug('Encrypted content:', encryptedContent);
     
     // Create a mock event
     const mockEvent = {
@@ -377,27 +389,27 @@ function testProcessMessage(eventPubkey, encryptedContent) {
 }
 
 function testConversationData() {
-    console.log('=== TESTING CONVERSATION DATA INTEGRITY ===');
-    console.log('Number of conversations:', incognitoState.conversations.size);
+    Logger.debug('=== TESTING CONVERSATION DATA INTEGRITY ===');
+    Logger.debug('Number of conversations:', incognitoState.conversations.size);
     
     for (const [recipient, data] of incognitoState.conversations) {
-        console.log('Conversation with:', recipient);
-        console.log('- Full data:', data);
-        console.log('- conversationPubkey:', data.conversationPubkey);
-        console.log('- recipient:', data.recipient);
-        console.log('- status:', data.status);
-        console.log('---');
+        Logger.debug('Conversation with:', recipient);
+        Logger.debug('- Full data:', data);
+        Logger.debug('- conversationPubkey:', data.conversationPubkey);
+        Logger.debug('- recipient:', data.recipient);
+        Logger.debug('- status:', data.status);
+        Logger.debug('---');
     }
     
     // Also check localStorage directly
     const stored = localStorage.getItem('incognitoState');
     if (stored) {
         const data = JSON.parse(stored);
-        console.log('Raw localStorage data:', data);
+        Logger.debug('Raw localStorage data:', data);
         if (data.conversations) {
             for (const [key, value] of Object.entries(data.conversations)) {
-                console.log('Stored conversation for:', key.substring(0, 16) + '...');
-                console.log('- conversationPubkey:', value.conversationPubkey);
+                Logger.debug('Stored conversation for:', key.substring(0, 16) + '...');
+                Logger.debug('- conversationPubkey:', value.conversationPubkey);
             }
         }
     }

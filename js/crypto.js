@@ -2,10 +2,10 @@
 
 // Test NIP-44 functionality
 function testNip44() {
-    console.log('=== TESTING NIP-44 FUNCTIONALITY ===');
+    Logger.debug('=== TESTING NIP-44 FUNCTIONALITY ===');
     
     if (!window.NostrTools.nip44) {
-        console.error('NIP-44 not available');
+        Logger.error('NIP-44 not available');
         return false;
     }
     
@@ -13,14 +13,14 @@ function testNip44() {
     const testPrivateKey = window.NostrTools.generateSecretKey();
     const testPublicKey = window.NostrTools.getPublicKey(testPrivateKey);
     
-    console.log('Test private key type:', typeof testPrivateKey);
-    console.log('Test private key:', testPrivateKey);
-    console.log('Test public key type:', typeof testPublicKey);
-    console.log('Test public key:', testPublicKey);
+    Logger.debug('Test private key type:', typeof testPrivateKey);
+    Logger.debug('Test private key:', testPrivateKey);
+    Logger.debug('Test public key type:', typeof testPublicKey);
+    Logger.debug('Test public key:', testPublicKey);
     
     // Test message
     const testMessage = 'Hello, NIP-44!';
-    console.log('Test message:', testMessage);
+    Logger.debug('Test message:', testMessage);
     
     // Convert keys to the format needed for NIP-44
     let privateKeyBytes, publicKeyBytes;
@@ -39,7 +39,7 @@ function testNip44() {
     
     try {
         // Test encryption
-        console.log('Testing encryption...');
+        Logger.debug('Testing encryption...');
         const conversationKey = window.NostrTools.nip44.getConversationKey(
             privateKeyBytes,
             testPublicKey // Use hex string
@@ -50,30 +50,30 @@ function testNip44() {
             conversationKey
         );
         
-        console.log('NIP-44 encryption successful with conversation key');
-        console.log('NIP-44 encryption test successful');
-        console.log('Encrypted length:', encrypted.length);
-        console.log('Encrypted preview:', encrypted.substring(0, 50) + '...');
+        Logger.debug('NIP-44 encryption successful with conversation key');
+        Logger.debug('NIP-44 encryption test successful');
+        Logger.debug('Encrypted length:', encrypted.length);
+        Logger.debug('Encrypted preview:', encrypted.substring(0, 50) + '...');
         
         // Test decryption
-        console.log('Testing decryption...');
+        Logger.debug('Testing decryption...');
         const decrypted = window.NostrTools.nip44.v2.decrypt(
             encrypted,
             conversationKey
         );
         
-        console.log('NIP-44 decryption test successful');
-        console.log('Decrypted message:', decrypted);
+        Logger.debug('NIP-44 decryption test successful');
+        Logger.debug('Decrypted message:', decrypted);
         
         if (decrypted === testMessage) {
-            console.log('NIP-44 test PASSED - encryption/decryption works correctly');
+            Logger.debug('NIP-44 test PASSED - encryption/decryption works correctly');
             return true;
         } else {
-            console.log('NIP-44 test FAILED - decrypted message does not match original');
+            Logger.debug('NIP-44 test FAILED - decrypted message does not match original');
             return false;
         }
     } catch (error) {
-        console.error('NIP-44 test FAILED:', error);
+        Logger.error('NIP-44 test FAILED:', error);
         return false;
     }
 }
@@ -81,47 +81,47 @@ function testNip44() {
 // REAL NIP-44 Gift Wrap Content Encryption
 async function encryptGiftWrapContent(content, recipientPubkey) {
     try {
-        console.log('=== NIP-44 ENCRYPTION START ===');
-        console.log('Encrypting with REAL NIP-44 for:', recipientPubkey);
-        console.log('Content to encrypt:', content);
-        console.log('Content length:', content.length);
-        console.log('Private key type:', typeof userKeys.privateKey);
-        console.log('Private key:', userKeys.privateKey);
-        console.log('Recipient pubkey:', recipientPubkey.substring(0, 10) + '...');
+        Logger.debug('=== NIP-44 ENCRYPTION START ===');
+        Logger.debug('Encrypting with REAL NIP-44 for:', recipientPubkey);
+        Logger.debug('Content to encrypt:', content);
+        Logger.debug('Content length:', content.length);
+        Logger.debug('Private key type:', typeof userKeys.privateKey);
+        Logger.debug('Private key:', userKeys.privateKey);
+        Logger.debug('Recipient pubkey:', recipientPubkey.substring(0, 10) + '...');
         
         // Check if NIP-44 is available
         if (!window.NostrTools.nip44) {
-            console.error('NIP-44 not available in nostr-tools');
+            Logger.error('NIP-44 not available in nostr-tools');
             throw new Error('NIP-44 not available in nostr-tools');
         }
         
-        console.log('NIP-44 module found:', !!window.NostrTools.nip44);
-        console.log('NIP-44 encrypt method:', !!window.NostrTools.nip44.encrypt);
+        Logger.debug('NIP-44 module found:', !!window.NostrTools.nip44);
+        Logger.debug('NIP-44 encrypt method:', !!window.NostrTools.nip44.encrypt);
         
         // Convert keys to Uint8Array for NIP-44
         const privateKeyBytes = hexToBytes(userKeys.privateKey); // Convert hex to Uint8Array
         const recipientPubkeyBytes = hexToBytes(recipientPubkey);
         
-        console.log('Private key bytes length:', privateKeyBytes.length);
-        console.log('Recipient pubkey bytes length:', recipientPubkeyBytes.length);
+        Logger.debug('Private key bytes length:', privateKeyBytes.length);
+        Logger.debug('Recipient pubkey bytes length:', recipientPubkeyBytes.length);
         
         // Use the correct NIP-44 API with conversation key
         let encrypted;
         try {
-            console.log('Attempting NIP-44 encryption with conversation key...');
+            Logger.debug('Attempting NIP-44 encryption with conversation key...');
             
             // Get conversation key using the correct API
-            console.log('Generating conversation key for encryption with:');
-            console.log('- Our private key:', privateKeyBytes);
-            console.log('- Recipient pubkey:', recipientPubkey);
+            Logger.debug('Generating conversation key for encryption with:');
+            Logger.debug('- Our private key:', privateKeyBytes);
+            Logger.debug('- Recipient pubkey:', recipientPubkey);
             
             const conversationKey = window.NostrTools.nip44.getConversationKey(
                 privateKeyBytes,
                 recipientPubkey // Use hex string, not Uint8Array
             );
             
-            console.log('Conversation key generated for encryption:', !!conversationKey);
-            console.log('Conversation key length:', conversationKey ? conversationKey.length : 'N/A');
+            Logger.debug('Conversation key generated for encryption:', !!conversationKey);
+            Logger.debug('Conversation key length:', conversationKey ? conversationKey.length : 'N/A');
             
             // Encrypt using the conversation key
             encrypted = window.NostrTools.nip44.v2.encrypt(
@@ -129,27 +129,27 @@ async function encryptGiftWrapContent(content, recipientPubkey) {
                 conversationKey
             );
             
-            console.log('NIP-44 encryption successful with conversation key');
+            Logger.debug('NIP-44 encryption successful with conversation key');
         } catch (encryptError) {
-            console.error('NIP-44 encrypt error:', encryptError);
-            console.error('Error details:', encryptError.message);
-            console.error('Error stack:', encryptError.stack);
+            Logger.error('NIP-44 encrypt error:', encryptError);
+            Logger.error('Error details:', encryptError.message);
+            Logger.error('Error stack:', encryptError.stack);
             throw new Error('NIP-44 encryption failed');
         }
         
-        console.log('Successfully encrypted content with REAL NIP-44');
-        console.log('Encrypted content type:', typeof encrypted);
-        console.log('Encrypted content length:', encrypted.length);
-        console.log('Encrypted content preview:', encrypted.substring(0, 50) + '...');
-        console.log('=== NIP-44 ENCRYPTION END ===');
+        Logger.debug('Successfully encrypted content with REAL NIP-44');
+        Logger.debug('Encrypted content type:', typeof encrypted);
+        Logger.debug('Encrypted content length:', encrypted.length);
+        Logger.debug('Encrypted content preview:', encrypted.substring(0, 50) + '...');
+        Logger.debug('=== NIP-44 ENCRYPTION END ===');
         
         // Return the encrypted content
         return encrypted;
     } catch (error) {
-        console.error('=== NIP-44 ENCRYPTION FAILED ===');
-        console.error('Error encrypting gift wrap content:', error);
-        console.error('Error message:', error.message);
-        console.error('Error stack:', error.stack);
+        Logger.error('=== NIP-44 ENCRYPTION FAILED ===');
+        Logger.error('Error encrypting gift wrap content:', error);
+        Logger.error('Error message:', error.message);
+        Logger.error('Error stack:', error.stack);
         throw error;
     }
 }
@@ -190,7 +190,7 @@ async function encryptGiftWrapContentWithIdentity(content, recipientPubkey, iden
         
         return encrypted;
     } catch (error) {
-        console.error('Error encrypting gift wrap content with identity:', error);
+        Logger.error('Error encrypting gift wrap content with identity:', error);
         throw error;
     }
 }
@@ -221,11 +221,11 @@ async function decryptGiftWrapContent(encryptedContent, senderPubkey) {
                 conversationKey
             );
             } catch (nip44Error) {
-                console.log('NIP-44 decryption failed:', nip44Error.message);
+                Logger.debug('NIP-44 decryption failed:', nip44Error.message);
                 
                 // Handle specific encryption errors
                 if (nip44Error.message && nip44Error.message.includes('unknown encryption version')) {
-                    console.log('Skipping message with unknown encryption version - likely corrupted or incompatible');
+                    Logger.debug('Skipping message with unknown encryption version - likely corrupted or incompatible');
                     return null;
                 }
                 
@@ -235,7 +235,7 @@ async function decryptGiftWrapContent(encryptedContent, senderPubkey) {
             
         return decrypted;
     } catch (error) {
-        // Tolerate occasional decrypt errors without noisy console.error
+        // Tolerate occasional decrypt errors without noisy Logger.error
         const msg = (error && error.message) ? error.message : String(error);
         if (msg.includes('invalid payload length')) {
             // Likely not a valid encrypted message
@@ -249,7 +249,7 @@ async function decryptGiftWrapContent(encryptedContent, senderPubkey) {
             return null;
         }
         // For anything else, downgrade to warn to avoid spam
-        console.warn('Decrypt (nip44 v2) failed:', msg);
+        Logger.warn('Decrypt (nip44 v2) failed:', msg);
         return null;
     }
 }
@@ -274,9 +274,9 @@ async function decryptGiftWrapContentWithIdentity(encryptedContent, senderPubkey
         // (this is the pubkey from the event that was sent)
         const senderConversationPubkey = senderPubkey;
         
-        console.log('Decrypting with:');
-        console.log('- Our private key (first 16 chars):', userKeys.privateKey.substring(0, 16) + '...');
-        console.log('- Sender conversation pubkey (first 16 chars):', senderConversationPubkey.substring(0, 16) + '...');
+        Logger.debug('Decrypting with:');
+        Logger.debug('- Our private key (first 16 chars):', userKeys.privateKey.substring(0, 16) + '...');
+        Logger.debug('- Sender conversation pubkey (first 16 chars):', senderConversationPubkey.substring(0, 16) + '...');
         
         // Generate the same conversation key that was used for encryption
         const conversationKey = window.NostrTools.nip44.getConversationKey(
@@ -291,13 +291,13 @@ async function decryptGiftWrapContentWithIdentity(encryptedContent, senderPubkey
                 encryptedContent,
                 conversationKey
             );
-            console.log('Successfully decrypted with conversation identity approach');
+            Logger.debug('Successfully decrypted with conversation identity approach');
         } catch (nip44Error) {
-            console.log('NIP-44 decryption failed:', nip44Error.message);
+            Logger.debug('NIP-44 decryption failed:', nip44Error.message);
             
             // Handle specific encryption errors
             if (nip44Error.message && nip44Error.message.includes('unknown encryption version')) {
-                console.log('Skipping message with unknown encryption version - likely corrupted or incompatible');
+                Logger.debug('Skipping message with unknown encryption version - likely corrupted or incompatible');
                 return null;
             }
             
@@ -307,7 +307,7 @@ async function decryptGiftWrapContentWithIdentity(encryptedContent, senderPubkey
         
         return decrypted;
     } catch (error) {
-        // Tolerate occasional decrypt errors without noisy console.error
+        // Tolerate occasional decrypt errors without noisy Logger.error
         const msg = (error && error.message) ? error.message : String(error);
         if (msg.includes('invalid payload length')) {
             return null;
@@ -320,7 +320,7 @@ async function decryptGiftWrapContentWithIdentity(encryptedContent, senderPubkey
             const fallback = await decryptGiftWrapContent(encryptedContent, senderPubkey);
             return fallback;
         }
-        console.warn('Decrypt (nip44 v2 with identity) failed:', msg);
+        Logger.warn('Decrypt (nip44 v2 with identity) failed:', msg);
         return null;
     }
 }
@@ -352,7 +352,7 @@ async function decryptGiftWrapContentForOutgoing(encryptedContent, recipientPubk
         if (msg.includes('invalid payload length') || msg.includes('unknown encryption version') || msg.includes('invalid MAC')) {
             return null;
         }
-        console.warn('Decrypt (outgoing nip44 v2) failed:', msg);
+        Logger.warn('Decrypt (outgoing nip44 v2) failed:', msg);
         return null;
     }
 }

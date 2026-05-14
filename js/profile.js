@@ -38,7 +38,7 @@ function flushProfileRequests() {
         try {
             sendToRelays(payload);
         } catch (error) {
-            console.error('Failed to request profile metadata batch:', error);
+            Logger.error('Failed to request profile metadata batch:', error);
         }
     }
 }

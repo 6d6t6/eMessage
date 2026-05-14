@@ -120,7 +120,7 @@ async function startNewConversation() {
         lastReadTime: Date.now()
     };
     
-    console.log('Creating conversation:', conversation);
+    Logger.debug('Creating conversation:', conversation);
     
     // Add to conversations if not exists
     const existingIndex = chatState.conversations.findIndex(c => c.id === conversationId);
@@ -197,24 +197,17 @@ function selectConversation(conversationId, source = 'system') {
     if (isMobile && chatState.disableMobileAutoOpen && source !== 'user') {
         return;
     }
-    console.log('Selecting conversation:', conversationId);
+    Logger.debug('Selecting conversation:', conversationId);
     chatState.lastConversationSelectSource = source;
     chatState.currentConversation = conversationId;
     
     const conversation = chatState.conversations.find(c => c.id === conversationId);
     if (conversation) {
-        if (conversation.unreadCount) {
-            conversation.unreadCount = 0;
-        }
-        const messages = chatState.messages.get(conversationId) || [];
-        const lastMessage = messages.reduce((latest, current) => {
-            if (!latest) return current;
-            return current.timestamp > latest.timestamp ? current : latest;
-        }, null);
-        if (lastMessage && typeof lastMessage.timestamp === 'number') {
-            conversation.lastReadTime = lastMessage.timestamp * 1000;
-        } else if (!conversation.lastReadTime) {
-            conversation.lastReadTime = Date.now();
+        // Mark as read
+        conversation.unreadCount = 0;
+        conversation.lastReadTime = Date.now();
+        if (typeof scheduleReadMarkersSync === 'function') {
+            scheduleReadMarkersSync();
         }
     }
     
@@ -443,6 +436,17 @@ function displayConversationMessages(conversationId) {
     
     ensureProfileFetched(conversationId);
     
+    // Mark as read if this is the current conversation
+    const conversation = chatState.conversations.find(c => c.id === conversationId);
+    if (conversation) {
+        conversation.unreadCount = 0;
+        conversation.lastReadTime = Date.now();
+        saveChatState();
+        if (typeof scheduleReadMarkersSync === 'function') {
+            scheduleReadMarkersSync();
+        }
+    }
+    
     const GROUPING_THRESHOLD = 7 * 60; // 7 minutes in seconds
     let lastMessage = null;
     let html = '';
@@ -586,13 +590,13 @@ function displayConversationMessages(conversationId) {
 
 // Send message to conversation
 async function sendMessageToConversation(conversationId, messageText) {
-    console.log('Sending message to conversation:', conversationId, messageText);
+    Logger.debug('Sending message to conversation:', conversationId, messageText);
     
     if (!messageText.trim()) return;
     
     const conversation = chatState.conversations.find(c => c.id === conversationId);
     if (!conversation) {
-        console.error('Conversation not found:', conversationId);
+        Logger.error('Conversation not found:', conversationId);
         return;
     }
     
@@ -613,7 +617,7 @@ async function sendMessageToConversation(conversationId, messageText) {
         saveChatState();
         
     } catch (error) {
-        console.error('Error sending message:', error);
+        Logger.error('Error sending message:', error);
         showNotification('Error sending message: ' + error.message, 'error');
     }
 }
@@ -759,7 +763,7 @@ function updateConversationsDisplay() {
 
 // Process incoming message for conversation
 function processIncomingMessageForConversation(event, decryptedContent, conversationIdOverride = null) {
-    console.log('Processing incoming message for conversation:', conversationIdOverride || event.pubkey);
+    Logger.debug('Processing incoming message for conversation:', conversationIdOverride || event.pubkey);
     try {
         const parsedPayload = JSON.parse(decryptedContent);
         const originalMessage = parsedPayload && parsedPayload.event ? parsedPayload.event : parsedPayload;
@@ -776,7 +780,7 @@ function processIncomingMessageForConversation(event, decryptedContent, conversa
         // Check if we've already processed this message in this function
         const messageKey = `${event.id}_${originalMessage.id}`;
         if (processedMessageIds.has(messageKey)) {
-            console.log('Skipping already processed message in processIncomingMessageForConversation:', messageKey);
+            Logger.debug('Skipping already processed message in processIncomingMessageForConversation:', messageKey);
             return;
         }
         
@@ -807,7 +811,7 @@ function processIncomingMessageForConversation(event, decryptedContent, conversa
         }
         
         if (!conversationId) {
-            console.log('No conversation found for incoming message');
+            Logger.debug('No conversation found for incoming message');
             return;
         }
         
@@ -818,7 +822,7 @@ function processIncomingMessageForConversation(event, decryptedContent, conversa
         // Ensure conversation exists in chatState
         let chatConversation = chatState.conversations.find(c => c.id === conversationId);
         if (!chatConversation) {
-            console.log('Creating new conversation in chatState for incoming message from:', senderPubkey);
+            Logger.debug('Creating new conversation in chatState for incoming message from:', senderPubkey);
             chatConversation = {
                 id: conversationId,
                 recipient: senderPubkey,
@@ -829,7 +833,7 @@ function processIncomingMessageForConversation(event, decryptedContent, conversa
                 lastReadTime: 0
             };
             chatState.conversations.unshift(chatConversation);
-            console.log('Created conversation:', chatConversation);
+            Logger.debug('Created conversation:', chatConversation);
             ensureProfileFetched(senderPubkey);
             
             // Show a notification about the new conversation
@@ -838,14 +842,14 @@ function processIncomingMessageForConversation(event, decryptedContent, conversa
         
         // Ensure the conversation exists in incognitoState for the receiver to be able to reply
         if (!incognitoState.conversations.has(senderPubkey)) {
-            console.log('Creating incognito conversation for receiver to reply to:', senderPubkey);
+            Logger.debug('Creating incognito conversation for receiver to reply to:', senderPubkey);
             const conversationData = createIncognitoConversation(senderPubkey);
             incognitoState.conversations.set(senderPubkey, conversationData);
             saveIncognitoState();
-            console.log('Incognito conversation created for reply:', conversationData);
+            Logger.debug('Incognito conversation created for reply:', conversationData);
         } else {
-            console.log('Found existing incognito conversation for:', senderPubkey);
-            console.log('Conversation data:', incognitoState.conversations.get(senderPubkey));
+            Logger.debug('Found existing incognito conversation for:', senderPubkey);
+            Logger.debug('Conversation data:', incognitoState.conversations.get(senderPubkey));
         }
         
         // If this is a reply from the recipient's reply identity, update our conversation data
@@ -855,7 +859,7 @@ function processIncomingMessageForConversation(event, decryptedContent, conversa
             conversationData.recipientReplyIdentity = {
                 publicKey: event.pubkey
             };
-            console.log('Learned recipient reply identity in processIncomingMessageForConversation:', event.pubkey, 'for conversation with:', senderPubkey);
+            Logger.debug('Learned recipient reply identity in processIncomingMessageForConversation:', event.pubkey, 'for conversation with:', senderPubkey);
             saveIncognitoState();
         }
         
@@ -882,9 +886,9 @@ function processIncomingMessageForConversation(event, decryptedContent, conversa
                 return a.timestamp - b.timestamp;
             });
             chatState.messages.set(conversationId, messages);
-            console.log('Added new message to conversation:', message.id, 'sent:', message.sent);
+            Logger.debug('Added new message to conversation:', message.id, 'sent:', message.sent);
         } else {
-            console.log('Skipping duplicate message:', message.id);
+            Logger.debug('Skipping duplicate message:', message.id);
         }
         
         // Update conversation
@@ -898,8 +902,15 @@ function processIncomingMessageForConversation(event, decryptedContent, conversa
             if (chatState.currentConversation === conversationId) {
                 chatConversation.unreadCount = 0;
                 chatConversation.lastReadTime = Date.now();
+                if (typeof scheduleReadMarkersSync === 'function') {
+                    scheduleReadMarkersSync();
+                }
             } else if (!message.sent && !isDuplicate) {
-                chatConversation.unreadCount = (chatConversation.unreadCount || 0) + 1;
+                // Only increment unread if it's actually newer than our last read time
+                const isNewerThanRead = messageTimeMs > (chatConversation.lastReadTime || 0);
+                if (isNewerThanRead) {
+                    chatConversation.unreadCount = (chatConversation.unreadCount || 0) + 1;
+                }
             }
         }
         
@@ -913,7 +924,7 @@ function processIncomingMessageForConversation(event, decryptedContent, conversa
             const isMobile = window.innerWidth <= 900;
             const disableAutoOpen = isMobile && chatState.disableMobileAutoOpen;
             if (!chatState.currentConversation && !suppressAutoSelect && !disableAutoOpen) {
-                console.log('Auto-selecting conversation:', conversationId);
+                Logger.debug('Auto-selecting conversation:', conversationId);
                 selectConversation(conversationId);
             }
         }
@@ -921,7 +932,7 @@ function processIncomingMessageForConversation(event, decryptedContent, conversa
         updateConversationsDisplay();
         saveChatState();
         
-        console.log('Message processed successfully. Conversation updated.');
+        Logger.debug('Message processed successfully. Conversation updated.');
         
         // Show notification
         const notificationsSuppressed = chatState.suppressNotificationsUntil
@@ -940,13 +951,13 @@ function processIncomingMessageForConversation(event, decryptedContent, conversa
         }
         
     } catch (parseError) {
-        console.error('Error parsing decrypted message:', parseError);
+        Logger.error('Error parsing decrypted message:', parseError);
     }
 }
 
 // Function to retry sending a failed message
 async function retryMessage(originalMessageId) {
-    console.log('Retrying message:', originalMessageId);
+    Logger.debug('Retrying message:', originalMessageId);
     
     // Find the message in conversations by original message ID
     let foundMessage = null;
@@ -962,7 +973,7 @@ async function retryMessage(originalMessageId) {
     }
     
     if (!foundMessage) {
-        console.error('Message not found for retry:', originalMessageId);
+        Logger.error('Message not found for retry:', originalMessageId);
         showNotification('Message not found for retry', 'error');
         return;
     }
@@ -1003,7 +1014,7 @@ async function retryMessage(originalMessageId) {
         
         showNotification('Message retry successful!', 'success');
     } catch (error) {
-        console.error('Error retrying message:', error);
+        Logger.error('Error retrying message:', error);
         
         // If retry failed, restore the original failed message
         const messages = chatState.messages.get(foundConversationId);

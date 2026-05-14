@@ -1,9 +1,14 @@
 // Incognito messaging functions (NIP-TBD implementation)
 
 const INCOGNITO_BACKUP_TAG = 'emessage-incognito';
-const INCOGNITO_BACKUP_DEBOUNCE_MS = 1500;
+const INCOGNITO_BACKUP_DEBOUNCE_MS = 5000;
 let incognitoBackupTimer = null;
 let incognitoBackupPending = false;
+
+const READ_MARKERS_TAG = 'emessage-read-markers';
+const READ_MARKERS_DEBOUNCE_MS = 10000; // 10 seconds to batch multiple reads
+let readMarkersTimer = null;
+let readMarkersPending = false;
 
 // Generate disposable identity for a conversation
 function generateDisposableIdentity(recipientPubkey, identityIndex = 0, conversationCounter = null) {
@@ -40,7 +45,7 @@ function generateDisposableIdentity(recipientPubkey, identityIndex = 0, conversa
             publicKey: disposablePublicKey
         };
     } catch (error) {
-        console.error('Error generating disposable identity:', error);
+        Logger.error('Error generating disposable identity:', error);
         throw error;
     }
 }
@@ -86,7 +91,7 @@ function parseInvitationPayload(content) {
 // Create conversation for incognito messaging
 function createIncognitoConversation(recipientPubkey) {
     try {
-        console.log('Creating incognito conversation for:', recipientPubkey);
+        Logger.debug('Creating incognito conversation for:', recipientPubkey);
         
         // Generate two disposable identities for this conversation
         const senderIdentity = generateDisposableIdentity(recipientPubkey, 0); // For sending invitation
@@ -120,10 +125,10 @@ function createIncognitoConversation(recipientPubkey) {
         saveIncognitoState();
         scheduleIncognitoBackup();
         
-        console.log('Incognito conversation created successfully');
+        Logger.debug('Incognito conversation created successfully');
         return conversationData;
     } catch (error) {
-        console.error('Error creating incognito conversation:', error);
+        Logger.error('Error creating incognito conversation:', error);
         throw error;
     }
 }
@@ -146,7 +151,7 @@ async function createInvitationSignature(recipientPubkey, conversationPubkey) {
         const signedEvent = await signNostrEvent(eventTemplate);
         return signedEvent.sig;
     } catch (error) {
-        console.error('Error creating invitation signature:', error);
+        Logger.error('Error creating invitation signature:', error);
         throw error;
     }
 }
@@ -154,7 +159,7 @@ async function createInvitationSignature(recipientPubkey, conversationPubkey) {
 // Send incognito invitation using NIP-04 (regular DM)
 async function sendIncognitoInvitation(recipientPubkey, conversationData) {
     try {
-        console.log('Sending incognito invitation to:', recipientPubkey);
+        Logger.debug('Sending incognito invitation to:', recipientPubkey);
         
         // Create invitation signature
         const invitationSig = await createInvitationSignature(recipientPubkey, conversationData.conversationIdentity.publicKey);
@@ -220,12 +225,12 @@ ${inviteCode}`;
         
         sendToRelays(sendMessage);
         
-        console.log('Incognito invitation sent successfully');
+        Logger.debug('Incognito invitation sent successfully');
         showNotification('Incognito invitation sent!', 'success');
         
         return signedInvitation;
     } catch (error) {
-        console.error('Error sending incognito invitation:', error);
+        Logger.error('Error sending incognito invitation:', error);
         throw error;
     }
 }
@@ -233,28 +238,28 @@ ${inviteCode}`;
 // Send incognito message using conversation identity
 async function sendIncognitoMessage(recipientPubkey, messageText) {
     try {
-        console.log('=== SENDING INCOGNITO MESSAGE ===');
-        console.log('Recipient:', recipientPubkey.substring(0, 16) + '...');
-        console.log('Message text:', messageText);
-        console.log('Message length:', messageText.length);
+        Logger.debug('=== SENDING INCOGNITO MESSAGE ===');
+        Logger.debug('Recipient:', recipientPubkey.substring(0, 16) + '...');
+        Logger.debug('Message text:', messageText);
+        Logger.debug('Message length:', messageText.length);
         
         // Get or create conversation
         let conversationData = incognitoState.conversations.get(recipientPubkey);
         if (!conversationData) {
-            console.log('No existing conversation, creating new one...');
+            Logger.debug('No existing conversation, creating new one...');
             conversationData = createIncognitoConversation(recipientPubkey);
             
             // Send invitation first
-            console.log('Sending invitation...');
+            Logger.debug('Sending invitation...');
             await sendIncognitoInvitation(recipientPubkey, conversationData);
         
         // Add a delay to ensure invitation is processed before sending message
         await new Promise(resolve => setTimeout(resolve, 1000));
         } else {
-            console.log('Using existing conversation');
+            Logger.debug('Using existing conversation');
             // Check if existing conversation has proper key formats (for backward compatibility)
             if (!conversationData.conversationIdentity.privateKeyHex) {
-                console.log('Regenerating conversation identity for backward compatibility');
+                Logger.debug('Regenerating conversation identity for backward compatibility');
                 conversationData.conversationIdentity = generateDisposableIdentity(recipientPubkey, 1);
                 // Also regenerate sender identity if needed
                 if (!conversationData.senderIdentity.privateKeyHex) {
@@ -266,7 +271,7 @@ async function sendIncognitoMessage(recipientPubkey, messageText) {
             }
         }
         
-        console.log('Using conversation identity for sending:', conversationData.conversationIdentity.publicKey);
+        Logger.debug('Using conversation identity for sending:', conversationData.conversationIdentity.publicKey);
         
         if (conversationData.relay && typeof ensureRelayEnabled === 'function') {
             ensureRelayEnabled(conversationData.relay);
@@ -288,14 +293,14 @@ async function sendIncognitoMessage(recipientPubkey, messageText) {
             content: messageText
         };
         
-        console.log('Created original message event:', originalMessage.id || 'no-id-yet');
+        Logger.debug('Created original message event:', originalMessage.id || 'no-id-yet');
         
         // Sign the original message
         const signedOriginalMessage = await signNostrEvent(originalMessage);
-        console.log('Signed original message ID:', signedOriginalMessage.id);
+        Logger.debug('Signed original message ID:', signedOriginalMessage.id);
         
         // Wrap it as incognito message using conversation identity
-        console.log('Encrypting message content...');
+        Logger.debug('Encrypting message content...');
         let payload = signedOriginalMessage;
         if (profileState && profileState.metadata) {
             payload = {
@@ -304,59 +309,66 @@ async function sendIncognitoMessage(recipientPubkey, messageText) {
                 profileUpdatedAt: profileState.updatedAt || null
             };
         }
-        const encryptedContent = await encryptGiftWrapContentWithIdentity(JSON.stringify(payload), recipientPubkey, conversationData.conversationIdentity);
-        console.log('Encrypted content length:', encryptedContent.length);
+        // 1. CREATE RECIPIENT WRAP (Standard NIP-17)
+        const recipientEncrypted = await encryptGiftWrapContentWithIdentity(JSON.stringify(payload), recipientPubkey, conversationData.conversationIdentity);
         
-        const incognitoWrapEvent = {
-            kind: 4,
-            pubkey: conversationData.conversationIdentity.publicKey, // This should be the identity shared in invitation
+        const recipientWrapEvent = {
+            kind: 1059,
+            pubkey: conversationData.conversationIdentity.publicKey,
             created_at: Math.floor(Date.now() / 1000),
-            tags: [
-                ['p', recipientPubkey] // Use actual recipient for routing
-            ],
-            content: encryptedContent
+            tags: [['p', recipientPubkey]],
+            content: recipientEncrypted
         };
         
-        console.log('Created incognito wrap event');
-        
         // Sign with conversation identity
-        const privateKeyHex = conversationData.conversationIdentity.privateKeyHex || 
-                              (conversationData.conversationIdentity.privateKey ? 
-                               bytesToHex(conversationData.conversationIdentity.privateKey) : 
-                               null);
+        const privKeyHex = conversationData.conversationIdentity.privateKeyHex || 
+                          (conversationData.conversationIdentity.privateKey ? 
+                           bytesToHex(conversationData.conversationIdentity.privateKey) : 
+                           null);
         
-        if (!privateKeyHex) {
+        if (!privKeyHex) {
             throw new Error('Unable to get private key for conversation identity');
         }
         
-        const signedIncognitoMessage = await signNostrEvent(incognitoWrapEvent, privateKeyHex);
-        console.log('Signed incognito message ID:', signedIncognitoMessage.id);
+        const signedRecipientWrap = await signNostrEvent(recipientWrapEvent, privKeyHex);
+        
+        // 2. CREATE SELF WRAP (Sealed Outbox with Jitter & Anonymity)
+        // We use a one-time random identity for the self-copy so it can't be linked to your main account or ghost identity by authors.
+        const oneTimeSecret = window.NostrTools.generateSecretKey();
+        const oneTimePubkey = window.NostrTools.getPublicKey(oneTimeSecret);
+        const selfEncrypted = await encryptGiftWrapContent(JSON.stringify(payload), userKeys.publicKey);
+        
+        const selfWrapEvent = {
+            kind: 1059,
+            pubkey: oneTimePubkey,
+            created_at: Math.floor(Date.now() / 1000),
+            tags: [['p', userKeys.publicKey]],
+            content: selfEncrypted
+        };
+        
+        const signedSelfWrap = await signNostrEvent(selfWrapEvent, bytesToHex(oneTimeSecret));
         
         // Check relay connection before sending
         if (!hasActiveRelayConnection()) {
             throw new Error('Relay connection is not open');
         }
         
-        // Send the incognito message
-        const sendMessage = JSON.stringify([
-            'EVENT',
-            signedIncognitoMessage
-        ]);
+        // Publish Recipient Wrap immediately
+        Logger.debug('Publishing Recipient Wrap...');
+        sendToRelays(JSON.stringify(['EVENT', signedRecipientWrap]));
         
-        console.log('Sending message to relay...');
-        console.log('Message size:', sendMessage.length, 'bytes');
+        // Jitter: Publish Self-Wrap after a random delay (5-25 seconds) to prevent traffic correlation
+        const jitterMs = 5000 + (Math.random() * 20000);
+        Logger.debug(`Scheduling Self-Copy with ${Math.round(jitterMs/1000)}s jitter for anonymity...`);
+        setTimeout(() => {
+            if (hasActiveRelayConnection()) {
+                sendToRelays(JSON.stringify(['EVENT', signedSelfWrap]));
+                Logger.debug('Untraceable Self-Copy sent successfully');
+            }
+        }, jitterMs);
         
-        sendToRelays(sendMessage);
-        
-        console.log('Message sent to relay successfully');
-        console.log('Signed message details:');
-        console.log('- Event ID:', signedIncognitoMessage.id);
-        console.log('- Pubkey:', signedIncognitoMessage.pubkey.substring(0, 16) + '...');
-        console.log('- Created at:', signedIncognitoMessage.created_at);
-        console.log('- Content length:', signedIncognitoMessage.content.length);
-        
-        // Track message sending status
-        messageSendingStatus.set(signedIncognitoMessage.id, {
+        // Track message sending status using the recipient wrap
+        messageSendingStatus.set(signedRecipientWrap.id, {
             status: 'pending',
             error: null,
             retryCount: 0,
@@ -366,11 +378,15 @@ async function sendIncognitoMessage(recipientPubkey, messageText) {
             relayAcks: {},
             acceptedRelays: [],
             rejectedRelays: [],
-            payload: sendMessage,
-            event: signedIncognitoMessage,
+            payload: JSON.stringify(['EVENT', signedRecipientWrap]),
+            event: signedRecipientWrap,
             retryTimer: null
         });
         scheduleSendRetry(signedIncognitoMessage.id);
+        
+        if (typeof saveMessageSendingStatus === 'function') {
+            saveMessageSendingStatus();
+        }
         
         showNotification('Incognito message sent!', 'success');
         
@@ -399,9 +415,9 @@ async function sendIncognitoMessage(recipientPubkey, messageText) {
                     return a.timestamp - b.timestamp;
                 });
                 chatState.messages.set(conversationId, conversationMessages);
-                console.log('Added sent message to conversation for immediate display:', signedOriginalMessage.id);
+                Logger.debug('Added sent message to conversation for immediate display:', signedOriginalMessage.id);
             } else {
-                console.log('Skipping duplicate sent message:', signedOriginalMessage.id);
+                Logger.debug('Skipping duplicate sent message:', signedOriginalMessage.id);
             }
             
             // Update conversation
@@ -421,15 +437,15 @@ async function sendIncognitoMessage(recipientPubkey, messageText) {
             updateConversationsDisplay();
             saveChatState();
             
-            console.log('Sent message displayed locally');
+            Logger.debug('Sent message displayed locally');
         }
         
-        console.log('=== MESSAGE SENDING COMPLETE ===');
+        Logger.debug('=== MESSAGE SENDING COMPLETE ===');
         return signedIncognitoMessage;
     } catch (error) {
-        console.error('=== ERROR SENDING INCOGNITO MESSAGE ===');
-        console.error('Error sending incognito message:', error);
-        console.error('Error stack:', error.stack);
+        Logger.error('=== ERROR SENDING INCOGNITO MESSAGE ===');
+        Logger.error('Error sending incognito message:', error);
+        Logger.error('Error stack:', error.stack);
         throw error;
     }
 }
@@ -532,17 +548,23 @@ function scheduleSendRetry(eventId) {
 // Handle incognito invitation received
 async function handleIncognitoInvitation(event) {
     try {
-        console.log('=== HANDLING INCOGNITO INVITATION ===');
-        console.log('Event ID:', event.id);
-        console.log('Event pubkey:', event.pubkey);
-        console.log('User private key available:', !!userKeys.privateKey);
+        Logger.debug('=== HANDLING INCOGNITO INVITATION ===');
+        Logger.debug('Event ID:', event.id);
+        Logger.debug('Event pubkey:', event.pubkey);
+        Logger.debug('User private key available:', !!userKeys.privateKey);
         
         // Check if we've already processed this invitation
         const existingInvitation = Array.from(incognitoState.pendingInvitations.values())
             .find(inv => inv.conversationPubkey === event.pubkey);
         
         if (existingInvitation && existingInvitation.status === 'accepted') {
-            console.log('Invitation already accepted, ignoring duplicate');
+            Logger.debug('Invitation already accepted, ignoring duplicate');
+            return;
+        }
+        
+        // Check if we already have this conversation established
+        if (incognitoState.conversations.has(event.pubkey)) {
+            Logger.debug('Conversation already exists for:', event.pubkey, '- skipping invitation auto-accept');
             return;
         }
         
@@ -560,7 +582,7 @@ async function handleIncognitoInvitation(event) {
             // Decrypt using NIP-44
                 decryptedContent = window.NostrTools.nip44.v2.decrypt(event.content, conversationKey);
         } catch (error) {
-            console.log('DECRYPTION FAILED - not meant for us:', error.message);
+            Logger.debug('DECRYPTION FAILED - not meant for us:', error.message);
             return;
         }
         
@@ -590,7 +612,7 @@ async function handleIncognitoInvitation(event) {
                         const metadata = JSON.parse(profilePayload);
                         upsertProfileCache(senderPubkey, metadata, event.created_at);
                     } catch (error) {
-                        console.warn('Failed to parse profile payload:', error);
+                        Logger.warn('Failed to parse profile payload:', error);
                     }
                 }
                 
@@ -627,14 +649,14 @@ async function handleIncognitoInvitation(event) {
                     acceptIncognitoInvitation(senderPubkey);
                 }, 500); // Increased delay to ensure invitation is fully processed
             } else {
-                console.log('Invalid signature for invitation from:', senderPubkey);
+                Logger.debug('Invalid signature for invitation from:', senderPubkey);
             }
         } else {
-            console.log('PARSING FAILED: No valid invitation format found');
+            Logger.debug('PARSING FAILED: No valid invitation format found');
             addPendingMessage(event);
         }
     } catch (error) {
-        console.error('Error handling incognito invitation:', error);
+        Logger.error('Error handling incognito invitation:', error);
     }
 }
 
@@ -660,7 +682,7 @@ function verifyInvitationSignature(senderPubkey, recipientPubkey, conversationPu
         // Use verifyEvent to check the signature
         return window.NostrTools.verifyEvent(eventTemplate);
     } catch (error) {
-        console.error('Error verifying invitation signature:', error);
+        Logger.error('Error verifying invitation signature:', error);
         return false;
     }
 }
@@ -668,15 +690,15 @@ function verifyInvitationSignature(senderPubkey, recipientPubkey, conversationPu
 // Accept incognito invitation
 function acceptIncognitoInvitation(senderPubkey) {
     try {
-        console.log('acceptIncognitoInvitation called for:', senderPubkey);
+        Logger.debug('acceptIncognitoInvitation called for:', senderPubkey);
         const invitation = incognitoState.pendingInvitations.get(senderPubkey);
-        console.log('Found invitation:', invitation);
+        Logger.debug('Found invitation:', invitation);
         
         if (!invitation) {
             throw new Error('Invitation not found');
         }
         
-        console.log('Accepting incognito invitation from:', senderPubkey);
+        Logger.debug('Accepting incognito invitation from:', senderPubkey);
         if (typeof requestProfileMetadata === 'function') {
             requestProfileMetadata(senderPubkey);
         }
@@ -708,11 +730,11 @@ function acceptIncognitoInvitation(senderPubkey) {
             conversationIndex
         };
         
-        console.log('Verified and stored conversation:');
-        console.log('- Their conversation identity (messages from):', invitation.conversationPubkey);
-        console.log('- Our sender identity (messages to):', ourSenderIdentity.publicKey);
-        console.log('- Our conversation identity (receive):', ourConversationIdentity.publicKey);
-        console.log('- Stored conversation data:', conversationData);
+        Logger.debug('Verified and stored conversation:');
+        Logger.debug('- Their conversation identity (messages from):', invitation.conversationPubkey);
+        Logger.debug('- Our sender identity (messages to):', ourSenderIdentity.publicKey);
+        Logger.debug('- Our conversation identity (receive):', ourConversationIdentity.publicKey);
+        Logger.debug('- Stored conversation data:', conversationData);
         
         incognitoState.conversations.set(senderPubkey, conversationData);
         invitation.status = 'accepted';
@@ -733,7 +755,7 @@ function acceptIncognitoInvitation(senderPubkey) {
         
         showNotification(`Incognito conversation with ${formatPubkey(senderPubkey)} is now active!`, 'success');
     } catch (error) {
-        console.error('Error accepting incognito invitation:', error);
+        Logger.error('Error accepting incognito invitation:', error);
     }
 }
 
@@ -742,19 +764,19 @@ async function handleIncognitoMessage(event) {
     try {
         // Check if we've already processed this message
         if (processedMessageIds.has(event.id)) {
-            console.log('Skipping already processed message:', event.id);
+            Logger.debug('Skipping already processed message:', event.id);
             return;
         }
         
         // Check if the message content is valid
         if (!event.content || event.content.length < 10) {
-            console.log('Skipping message with invalid content length:', event.content?.length);
+            Logger.debug('Skipping message with invalid content length:', event.content?.length);
             return;
         }
         
         // Check if this looks like encrypted content (should be base64-like)
         if (!event.content.match(/^[A-Za-z0-9+/=]+$/)) {
-            console.log('Skipping message that does not look like encrypted content');
+            Logger.debug('Skipping message that does not look like encrypted content');
             return;
         }
         
@@ -764,8 +786,8 @@ async function handleIncognitoMessage(event) {
         let senderPubkey = null;
         let conversationData = null;
         
-        console.log('Looking for conversation for event pubkey:', event.pubkey);
-        console.log('Available conversations:', Array.from(incognitoState.conversations.entries()).map(([k, v]) => ({
+        Logger.debug('Looking for conversation for event pubkey:', event.pubkey);
+        Logger.debug('Available conversations:', Array.from(incognitoState.conversations.entries()).map(([k, v]) => ({
             recipient: k,
             conversationPubkey: v.conversationPubkey,
             senderIdentity: v.senderIdentity?.publicKey,
@@ -777,28 +799,28 @@ async function handleIncognitoMessage(event) {
             if (data.conversationIdentity && data.conversationIdentity.publicKey === event.pubkey) {
                 senderPubkey = recipient;
                 conversationData = data;
-                console.log('Found conversation by conversationIdentity (outgoing):', recipient);
+                Logger.debug('Found conversation by conversationIdentity (outgoing):', recipient);
                 break;
             }
             // Check if this is a message from their conversation identity (initial messages)
             if (data.conversationPubkey === event.pubkey) {
                 senderPubkey = recipient;
                 conversationData = data;
-                console.log('Found conversation by conversationPubkey:', recipient);
+                Logger.debug('Found conversation by conversationPubkey:', recipient);
                 break;
             }
             // Check if this is a reply from their sender identity (reply messages)
             if (data.senderIdentity && data.senderIdentity.publicKey === event.pubkey) {
                 senderPubkey = recipient;
                 conversationData = data;
-                console.log('Found conversation by senderIdentity:', recipient);
+                Logger.debug('Found conversation by senderIdentity:', recipient);
                 break;
             }
             // Check if this is a reply from the recipient's reply identity
             if (data.recipientReplyIdentity && data.recipientReplyIdentity.publicKey === event.pubkey) {
                 senderPubkey = recipient;
                 conversationData = data;
-                console.log('Found conversation by recipientReplyIdentity:', recipient);
+                Logger.debug('Found conversation by recipientReplyIdentity:', recipient);
                 break;
             }
         }
@@ -817,17 +839,17 @@ async function handleIncognitoMessage(event) {
                             conversationData = candidate;
                         }
                         decryptedContentFromLookup = fallbackDecrypted;
-                        console.log('Resolved sender pubkey by decrypted payload:', senderPubkey);
+                        Logger.debug('Resolved sender pubkey by decrypted payload:', senderPubkey);
                     }
                 }
             } catch (error) {
-                console.log('Failed to resolve conversation from decrypted payload');
+                Logger.debug('Failed to resolve conversation from decrypted payload');
             }
         }
         
         // Additional check: if we still don't have a conversation, this might be a message from someone we don't have a conversation with yet
         if (!senderPubkey && incognitoState.conversations.size > 0) {
-            console.log('Still no conversation found, queueing for retry:', event.pubkey);
+            Logger.debug('Still no conversation found, queueing for retry:', event.pubkey);
             addPendingMessage(event);
             return;
         }
@@ -851,8 +873,8 @@ async function handleIncognitoMessage(event) {
             conversationData.recipientReplyIdentity = {
                 publicKey: event.pubkey
             };
-            console.log('Learned recipient reply identity:', event.pubkey, 'for conversation with:', senderPubkey);
-            console.log('Updated conversation data:', conversationData);
+            Logger.debug('Learned recipient reply identity:', event.pubkey, 'for conversation with:', senderPubkey);
+            Logger.debug('Updated conversation data:', conversationData);
             saveIncognitoState();
         }
         
@@ -871,69 +893,72 @@ async function handleIncognitoMessage(event) {
                 decryptedContent = await decryptGiftWrapContentWithIdentity(event.content, event.pubkey, conversationData);
             }
         } catch (decryptError) {
-            console.log('Failed to decrypt message from:', event.pubkey);
-            console.log('Decrypt error:', decryptError.message);
+            Logger.warn('Decryption failed for message from:', event.pubkey);
+            Logger.warn('- Reason:', decryptError.message);
+            Logger.warn('- Event ID:', event.id);
             
             // Handle specific encryption errors
             if (decryptError.message && decryptError.message.includes('unknown encryption version')) {
-                console.log('Skipping message with unknown encryption version - likely corrupted or incompatible');
+                Logger.debug('Skipping message with unknown encryption version - likely corrupted or incompatible');
                 return;
             }
             
             // For other decryption errors, just log and continue
-            console.log('Message decryption failed, skipping');
+            // We DON'T add to processedMessageIds so it can be retried if keys arrive later
             addPendingMessage(event);
             return;
         }
         
         if (decryptedContent) {
-            console.log('Successfully decrypted message from:', event.pubkey);
-            console.log('Decrypted content length:', decryptedContent.length);
+            Logger.debug('Successfully decrypted message from:', event.pubkey);
+            Logger.debug('Decrypted content length:', decryptedContent.length);
             
             // Check if this is actually an invitation (starts with "Someone wants to start an incognito conversation")
             if (decryptedContent.startsWith('Someone wants to start an incognito conversation')) {
-                console.log('Received invitation content in message handler, ignoring (already processed)');
+                Logger.debug('Received invitation content in message handler, ignoring (already processed)');
                 return;
             }
             
             try {
-                // Mark this message as processed now that we can handle it
-                processedMessageIds.add(event.id);
-                // Clean up old message IDs (keep last 1000)
-                if (processedMessageIds.size > 1000) {
-                    const idsArray = Array.from(processedMessageIds);
-                    processedMessageIds.clear();
-                    idsArray.slice(-500).forEach(id => processedMessageIds.add(id));
-                }
-                
                 // Process message for conversation interface ONLY
                 processIncomingMessageForConversation(event, decryptedContent, senderPubkey);
+                
+                // Mark this message as processed ONLY after successful handling
+                processedMessageIds.add(event.id);
+                
+                // Clean up old message IDs (keep last 10,000 to handle deep history sync)
+                if (processedMessageIds.size > 10000) {
+                    const idsArray = Array.from(processedMessageIds);
+                    processedMessageIds.clear();
+                    idsArray.slice(-5000).forEach(id => processedMessageIds.add(id));
+                }
                 
                 // Don't add to legacy system to avoid duplication
                 
             } catch (parseError) {
-                console.error('Error parsing decrypted message:', parseError);
-                console.error('Decrypted content:', decryptedContent);
+                Logger.error('Error processing decrypted message:', parseError);
+                Logger.error('Decrypted content length:', decryptedContent.length);
+                // We don't mark as processed so we can retry later if it was a transient error
             }
         } else {
-            console.log('Failed to decrypt message content from:', event.pubkey);
-            console.log('Event content length:', event.content?.length);
+            Logger.debug('Failed to decrypt message content from:', event.pubkey);
+            Logger.debug('Event content length:', event.content?.length);
             addPendingMessage(event);
         }
     } catch (error) {
-        console.error('Error handling incognito message:', error);
-        console.error('Error details:', error.message);
-        console.error('Event pubkey:', event.pubkey);
-        console.error('Event content length:', event.content ? event.content.length : 'undefined');
+        Logger.error('Error handling incognito message:', error);
+        Logger.error('Error details:', error.message);
+        Logger.error('Event pubkey:', event.pubkey);
+        Logger.error('Event content length:', event.content ? event.content.length : 'undefined');
     }
 }
 
 // Debug functions for testing
 function testIncognitoMessaging() {
-    console.log('=== TESTING INCOGNITO MESSAGING ===');
+    Logger.debug('=== TESTING INCOGNITO MESSAGING ===');
     
     if (!userKeys) {
-        console.error('No user keys available');
+        Logger.error('No user keys available');
         return false;
     }
     
@@ -941,48 +966,48 @@ function testIncognitoMessaging() {
     const testRecipientKey = window.NostrTools.generateSecretKey();
     const testRecipientPubkey = window.NostrTools.getPublicKey(testRecipientKey);
     
-    console.log('Test recipient pubkey:', testRecipientPubkey);
+    Logger.debug('Test recipient pubkey:', testRecipientPubkey);
     
     // Test sending a message
     const testMessage = 'Hello, this is a test incognito message!';
-    console.log('Test message:', testMessage);
+    Logger.debug('Test message:', testMessage);
     
     // Simulate the encryption process
     try {
         const encrypted = encryptGiftWrapContent(testMessage, testRecipientPubkey);
-        console.log('Message encrypted successfully');
-        console.log('Encrypted length:', encrypted.length);
+        Logger.debug('Message encrypted successfully');
+        Logger.debug('Encrypted length:', encrypted.length);
         
         // Now simulate decryption (as if we were the recipient)
         const decrypted = decryptGiftWrapContent(encrypted, userKeys.publicKey);
-        console.log('Message decrypted successfully');
-        console.log('Decrypted message:', decrypted);
+        Logger.debug('Message decrypted successfully');
+        Logger.debug('Decrypted message:', decrypted);
         
         if (decrypted === testMessage) {
-            console.log('Incognito messaging test PASSED');
+            Logger.debug('Incognito messaging test PASSED');
             return true;
         } else {
-            console.log('Incognito messaging test FAILED - decrypted message does not match');
+            Logger.debug('Incognito messaging test FAILED - decrypted message does not match');
             return false;
         }
     } catch (error) {
-        console.error('Incognito messaging test FAILED:', error);
+        Logger.error('Incognito messaging test FAILED:', error);
         return false;
     }
 }
 
 // Debug function to list all conversations
 function listConversations() {
-    console.log('=== LISTING ALL CONVERSATIONS ===');
-    console.log('Total conversations:', incognitoState.conversations.size);
+    Logger.debug('=== LISTING ALL CONVERSATIONS ===');
+    Logger.debug('Total conversations:', incognitoState.conversations.size);
     
     for (const [recipient, data] of incognitoState.conversations) {
-        console.log('Conversation with:', recipient);
-        console.log('- Conversation pubkey:', data.conversationPubkey);
-        console.log('- Conversation identity:', data.conversationIdentity ? data.conversationIdentity.publicKey : 'none');
-        console.log('- Sender identity:', data.senderIdentity ? data.senderIdentity.publicKey : 'none');
-        console.log('- Status:', data.status);
-        console.log('---');
+        Logger.debug('Conversation with:', recipient);
+        Logger.debug('- Conversation pubkey:', data.conversationPubkey);
+        Logger.debug('- Conversation identity:', data.conversationIdentity ? data.conversationIdentity.publicKey : 'none');
+        Logger.debug('- Sender identity:', data.senderIdentity ? data.senderIdentity.publicKey : 'none');
+        Logger.debug('- Status:', data.status);
+        Logger.debug('---');
     }
 }
 
@@ -1034,6 +1059,58 @@ async function publishIncognitoBackup() {
     incognitoBackupPending = false;
 }
 
+async function publishReadMarkers() {
+    if (!userKeys || !chatState.conversations.length) return;
+    
+    Logger.debug('Preparing to sync read markers to relay...');
+    
+    const readMarkers = {};
+    chatState.conversations.forEach(conv => {
+        if (conv.lastReadTime) {
+            readMarkers[conv.id] = conv.lastReadTime;
+        }
+    });
+    
+    if (Object.keys(readMarkers).length === 0) return;
+    
+    const encrypted = await encryptGiftWrapContent(JSON.stringify(readMarkers), userKeys.publicKey);
+    
+    const eventTemplate = {
+        kind: 30078,
+        created_at: Math.floor(Date.now() / 1000),
+        tags: [['d', READ_MARKERS_TAG]],
+        content: encrypted
+    };
+    
+    const signedEvent = await signNostrEvent(eventTemplate);
+    
+    // Add jitter (2-8 seconds) before sending read markers to avoid direct correlation with chat activity
+    const jitterMs = 2000 + (Math.random() * 6000);
+    Logger.debug(`Scheduling read marker sync with ${Math.round(jitterMs/1000)}s jitter...`);
+    
+    setTimeout(() => {
+        if (hasActiveRelayConnection()) {
+            sendToRelays(JSON.stringify(['EVENT', signedEvent]));
+            Logger.debug('Read markers synced to network successfully');
+        }
+    }, jitterMs);
+    
+    readMarkersPending = false;
+}
+
+function scheduleReadMarkersSync() {
+    if (!userKeys) return;
+    if (readMarkersTimer) {
+        clearTimeout(readMarkersTimer);
+    }
+    readMarkersTimer = setTimeout(() => {
+        readMarkersTimer = null;
+        publishReadMarkers().catch((error) => {
+            Logger.warn('Failed to sync read markers:', error.message || error);
+        });
+    }, READ_MARKERS_DEBOUNCE_MS);
+}
+
 function scheduleIncognitoBackup() {
     if (!userKeys) return;
     if (incognitoBackupTimer) {
@@ -1042,7 +1119,7 @@ function scheduleIncognitoBackup() {
     incognitoBackupTimer = setTimeout(() => {
         incognitoBackupTimer = null;
         publishIncognitoBackup().catch((error) => {
-            console.warn('Failed to publish incognito backup:', error.message || error);
+            Logger.warn('Failed to publish incognito backup:', error.message || error);
         });
     }, INCOGNITO_BACKUP_DEBOUNCE_MS);
 }
@@ -1118,6 +1195,56 @@ function subscribeToIncognitoBackup(socket) {
     socket.send(JSON.stringify(['REQ', subscriptionId, filter]));
 }
 
+function subscribeToReadMarkers(socket) {
+    if (!socket || socket.readyState !== WebSocket.OPEN || !userKeys) {
+        return;
+    }
+    
+    const subscriptionId = 'read_markers_' + Date.now();
+    const filter = {
+        kinds: [30078],
+        authors: [userKeys.publicKey],
+        '#d': [READ_MARKERS_TAG],
+        limit: 1
+    };
+    
+    socket.send(JSON.stringify(['REQ', subscriptionId, filter]));
+}
+
+async function handleReadMarkersEvent(event) {
+    if (!event || !userKeys) return;
+    const hasTag = Array.isArray(event.tags)
+        && event.tags.some((tag) => tag[0] === 'd' && tag[1] === READ_MARKERS_TAG);
+    if (!hasTag) return;
+    
+    Logger.debug('Received read markers from network, merging...');
+    
+    const decrypted = await decryptGiftWrapContent(event.content, event.pubkey);
+    if (!decrypted) return;
+    
+    try {
+        const remoteMarkers = JSON.parse(decrypted);
+        let updated = false;
+        
+        chatState.conversations.forEach(conv => {
+            const remoteTime = remoteMarkers[conv.id];
+            if (remoteTime && (!conv.lastReadTime || remoteTime > conv.lastReadTime)) {
+                conv.lastReadTime = remoteTime;
+                conv.unreadCount = 0; // Reset unread if remote says we read it
+                updated = true;
+            }
+        });
+        
+        if (updated) {
+            Logger.debug('Chat state updated from remote read markers');
+            updateConversationsDisplay();
+            saveChatState();
+        }
+    } catch (e) {
+        Logger.error('Error parsing remote read markers:', e);
+    }
+}
+
 async function handleIncognitoBackupEvent(event) {
     if (!event || !userKeys) return;
     const hasTag = Array.isArray(event.tags)
@@ -1131,7 +1258,7 @@ async function handleIncognitoBackupEvent(event) {
     try {
         backup = JSON.parse(decrypted);
     } catch (error) {
-        console.warn('Failed to parse incognito backup payload');
+        Logger.warn('Failed to parse incognito backup payload');
         return;
     }
     
@@ -1220,15 +1347,19 @@ async function handleIncognitoBackupEvent(event) {
             updateProfileAvatar();
             updateStatus();
             syncProfileForms();
-            setTimeout(() => {
-                incognitoState.conversations.forEach((_, recipient) => {
+            
+            // Throttle profile syncs to avoid rate limits
+            let delay = 1000;
+            incognitoState.conversations.forEach((_, recipient) => {
+                setTimeout(() => {
                     sendIncognitoProfileSync(recipient);
-                });
-            }, 500);
+                }, delay);
+                delay += 2000; // 2-second stagger between each sync
+            });
         }
         if (typeof getConnectedRelays === 'function') {
             getConnectedRelays().forEach((state) => {
-                subscribeToIncognitoMessages(state.socket);
+                subscribeToIncognitoMessages(state.socket, null, 0);
             });
         }
         retryPendingMessages();

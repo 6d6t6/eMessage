@@ -29,6 +29,12 @@ function setAuthView(isAuthenticated) {
     if (appContainer) {
         appContainer.style.display = isAuthenticated ? 'flex' : 'none';
     }
+
+    if (isAuthenticated) {
+        document.body.classList.add('app-bootstrapped');
+    } else {
+        document.body.classList.remove('app-bootstrapped');
+    }
 }
 
 function showAuthStep(step) {
@@ -88,9 +94,44 @@ async function signInWithExtension() {
 }
 
 function startSignUp() {
-    generateKeys();
-    showAuthStep('profile');
-    syncProfileForms();
+    const keys = generateKeys();
+    if (!keys) return;
+    
+    // Store encoded keys in the userKeys object for easy access during this session
+    userKeys.nsec = keys.nsec;
+    userKeys.npub = keys.npub;
+    
+    // Show keys in the backup step
+    const npubDisplay = document.getElementById('signupNpubDisplay');
+    const nsecDisplay = document.getElementById('signupNsecDisplay');
+    const toggleBtn = document.getElementById('toggleSignupNsecBtn');
+    
+    if (npubDisplay) {
+        npubDisplay.textContent = keys.npub;
+    }
+    if (nsecDisplay) {
+        nsecDisplay.textContent = maskNsec(keys.nsec);
+        nsecDisplay.classList.add('masked-key');
+    }
+    if (toggleBtn) {
+        const icon = toggleBtn.querySelector('.material-symbols-rounded');
+        if (icon) icon.textContent = 'visibility_off';
+    }
+    
+    // Reset checkbox
+    const checkbox = document.getElementById('backupConfirmCheckbox');
+    if (checkbox) checkbox.checked = false;
+    toggleBackupButton();
+    
+    showAuthStep('keys');
+}
+
+function toggleBackupButton() {
+    const checkbox = document.getElementById('backupConfirmCheckbox');
+    const btn = document.getElementById('continueToProfileBtn');
+    if (checkbox && btn) {
+        btn.disabled = !checkbox.checked;
+    }
 }
 
 async function saveProfileAndContinue(prefix) {
@@ -136,7 +177,7 @@ function signOut() {
             }
         }
     } catch (error) {
-        console.warn('Failed clearing localStorage during sign out:', error);
+        Logger.warn('Failed clearing localStorage during sign out:', error);
     }
 
     userKeys = null;
@@ -247,3 +288,73 @@ function signOut() {
         }
     }, 0);
 }
+
+function updateAuthAvatarPreview(url) {
+    const preview = document.getElementById('authAvatarPreview');
+    if (!preview) return;
+    
+    if (url && (url.startsWith('http') || url.startsWith('data:image'))) {
+        preview.innerHTML = `<img src="${url}" onerror="this.parentElement.innerHTML='<span class=\\'material-symbols-rounded\\'>person</span>'">`;
+    } else {
+        preview.innerHTML = '<span class="material-symbols-rounded">person</span>';
+    }
+}
+
+function toggleSignupNsecVisibility() {
+    const el = document.getElementById('signupNsecDisplay');
+    const btn = document.getElementById('toggleSignupNsecBtn');
+    if (!el || !btn || !userKeys) return;
+    
+    const icon = btn.querySelector('.material-symbols-rounded');
+    const isMasked = el.classList.contains('masked-key');
+    
+    if (isMasked) {
+        el.textContent = userKeys.nsec;
+        el.classList.remove('masked-key');
+        if (icon) icon.textContent = 'visibility';
+    } else {
+        el.textContent = maskNsec(userKeys.nsec);
+        el.classList.add('masked-key');
+        if (icon) icon.textContent = 'visibility_off';
+    }
+}
+
+function copySignupNsec() {
+    if (!userKeys || !userKeys.nsec) return;
+    navigator.clipboard.writeText(userKeys.nsec).then(() => {
+        showNotification('Private key (nsec) copied', 'success');
+    });
+}
+
+function downloadKeysAsTxt() {
+    if (!userKeys) return;
+    
+    const confirmed = confirm("WARNING: You are about to download your Private Key in plain text. \n\nAnyone who gets access to this file will have FULL control over your account. \n\nDo you want to proceed?");
+    if (!confirmed) return;
+    
+    const content = `emessage - Nostr Keys Backup
+Generated: ${new Date().toLocaleString()}
+
+IMPORTANT: Keep this file secure and private. Never share your Private Key with anyone.
+
+Public Key (npub):
+${userKeys.npub}
+
+Private Key (nsec):
+${userKeys.nsec}
+
+You can use these keys to log in to emessage and any other Nostr client.`;
+
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'emessage_nostr_keys.txt';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    showNotification('Keys saved as .txt', 'success');
+}
+

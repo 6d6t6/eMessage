@@ -1,5 +1,44 @@
 // Utility functions for the Nostr DM application
 
+// Logger utility to manage console output levels
+const Logger = {
+    LEVELS: {
+        TRACE: 0,
+        DEBUG: 1,
+        INFO: 2,
+        WARN: 3,
+        ERROR: 4,
+        NONE: 5
+    },
+    currentLevel: 2, // Default to INFO
+
+    trace(...args) {
+        if (this.currentLevel <= this.LEVELS.TRACE) console.log('[TRACE]', ...args);
+    },
+    debug(...args) {
+        if (this.currentLevel <= this.LEVELS.DEBUG) console.log('[DEBUG]', ...args);
+    },
+    info(...args) {
+        if (this.currentLevel <= this.LEVELS.INFO) console.info('[INFO]', ...args);
+    },
+    log(...args) {
+        if (this.currentLevel <= this.LEVELS.INFO) console.log(...args);
+    },
+    warn(...args) {
+        if (this.currentLevel <= this.LEVELS.WARN) console.warn('[WARN]', ...args);
+    },
+    error(...args) {
+        if (this.currentLevel <= this.LEVELS.ERROR) console.error('[ERROR]', ...args);
+    },
+    setLevel(levelName) {
+        const level = this.LEVELS[levelName.toUpperCase()];
+        if (level !== undefined) {
+            this.currentLevel = level;
+            this.info(`Logger level set to ${levelName}`);
+        }
+    }
+};
+
 // Utility function to convert hex string to Uint8Array
 function hexToBytes(hex) {
     const bytes = new Uint8Array(hex.length / 2);
@@ -17,13 +56,13 @@ function bytesToHex(bytes) {
 // Utility function to check if NostrTools is loaded
 function checkNostrTools() {
     if (!window.NostrTools) {
-        console.error('NostrTools not available');
+        Logger.error('NostrTools not available');
         showNotification('Error: NostrTools library not loaded. Please refresh the page.', 'error');
         return false;
     }
     
-    console.log('NostrTools loaded successfully');
-    console.log('NIP-44 available:', !!window.NostrTools.nip44);
+    Logger.info('NostrTools loaded successfully');
+    Logger.debug('NIP-44 available:', !!window.NostrTools.nip44);
     return true;
 }
 
@@ -223,3 +262,4 @@ async function signNostrEvent(eventTemplate, privateKeyOverride = null) {
     
     return window.NostrTools.finalizeEvent(eventTemplate, userKeys.privateKey);
 }
+

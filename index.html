@@ -35,6 +35,7 @@
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet"
         href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+    <script src="https://unpkg.com/nostr-tools/lib/nostr.bundle.js"></script>
 
     <script>
         if ('serviceWorker' in navigator) {
@@ -49,7 +50,7 @@
     <div class="auth-container" id="authContainer">
         <div class="auth-card">
             <div class="auth-brand">
-                <span class="material-symbols-rounded">shield</span>
+                <img src="assets/icon.svg" class="auth-brand-logo" alt="emessage logo">
                 <div>
                     <h1>emessage</h1>
                     <p>Encrypted, decentralized, Nostr-based messaging.</p>
@@ -60,69 +61,142 @@
                 <button class="auth-tab" data-auth-tab="signup" onclick="showAuthStep('signup')">Sign Up</button>
             </div>
             <div class="auth-panel active" id="auth-signin">
+                <div class="auth-step-header">
+                    <h3>Welcome back!</h3>
+                    <p>We're so excited to see you again!</p>
+                </div>
                 <form class="auth-section" onsubmit="event.preventDefault(); signInWithNsec();">
-                    <label for="signInNsecInput">Sign in with nsec</label>
-                    <input type="password" id="signInNsecInput" placeholder="nsec1..." autocomplete="off">
+                    <div class="form-group">
+                        <label for="signInNsecInput">Sign in with nsec</label>
+                        <input type="password" id="signInNsecInput" placeholder="nsec1..." autocomplete="off">
+                    </div>
                     <button class="btn btn-primary" type="submit">
                         <span class="material-symbols-rounded">lock_open</span>
                         Sign In
                     </button>
                 </form>
                 <div class="auth-divider">or</div>
-                <button class="btn btn-secondary" onclick="signInWithExtension()">
-                    <span class="material-symbols-rounded">extension</span>
-                    Sign In with Extension
-                </button>
+                <div class="auth-secondary-actions">
+                    <button class="btn btn-secondary" onclick="signInWithExtension()">
+                        <span class="material-symbols-rounded">extension</span>
+                        Extension
+                    </button>
+                </div>
             </div>
             <div class="auth-panel" id="auth-signup">
-                <h3>Create a new keypair</h3>
-                <p>Your keys never leave this device. You can export them from settings after setup.</p>
+                <div class="auth-step-header">
+                    <h3>Create your account</h3>
+                    <p>Generate a new Nostr keypair. Your keys are generated locally and never leave your device.</p>
+                </div>
+                <div class="auth-illustration">
+                    <span class="material-symbols-rounded">security</span>
+                </div>
                 <button class="btn btn-primary" onclick="startSignUp()">
                     <span class="material-symbols-rounded">key</span>
                     Generate New Keypair
                 </button>
             </div>
+            <div class="auth-panel" id="auth-keys">
+                <div class="auth-step-header">
+                    <h3>Secure your keys</h3>
+                    <p>Nostr uses a keypair to identify you and encrypt your messages. Think of your <b>Public Key</b> as your username and your <b>Private Key</b> as your password.</p>
+                </div>
+                
+                <div class="key-backup-card">
+                    <div class="form-group">
+                        <div class="label-with-info">
+                            <label>Public Key (npub)</label>
+                            <span class="info-tag">Safe to share</span>
+                        </div>
+                        <div class="key-display-box">
+                            <span id="signupNpubDisplay">Generating...</span>
+                            <button class="copy-btn" onclick="copyToClipboard('signupNpubDisplay')">
+                                <span class="material-symbols-rounded">content_copy</span>
+                            </button>
+                        </div>
+                        <p class="field-hint">This is how people find you on Nostr.</p>
+                    </div>
+
+                    <div class="form-group">
+                        <div class="label-with-info">
+                            <label>Private Key (nsec)</label>
+                            <span class="info-tag warning">Secret - Never share</span>
+                        </div>
+                        <div class="key-display-box sensitive">
+                            <span id="signupNsecDisplay" class="masked-key">Generating...</span>
+                            <div class="key-actions">
+                                <button class="copy-btn" id="toggleSignupNsecBtn" onclick="toggleSignupNsecVisibility()" title="Show/Hide">
+                                    <span class="material-symbols-rounded">visibility_off</span>
+                                </button>
+                                <button class="copy-btn" onclick="copySignupNsec()" title="Copy nsec">
+                                    <span class="material-symbols-rounded">content_copy</span>
+                                </button>
+                            </div>
+                        </div>
+                        <p class="field-hint"><b>DO NOT LOSE THIS.</b> There is no "Forgot Password" on Nostr. If you lose this key, you lose your account forever.</p>
+                    </div>
+                </div>
+
+                <div class="key-backup-actions">
+                    <button class="btn btn-secondary btn-full" onclick="downloadKeysAsTxt()">
+                        <span class="material-symbols-rounded">download</span>
+                        Save keys as .txt
+                    </button>
+                </div>
+
+                <div class="backup-confirmation">
+                    <label class="checkbox-container">
+                        <input type="checkbox" id="backupConfirmCheckbox" onchange="toggleBackupButton()">
+                        <span class="checkmark"></span>
+                        I understand that I am responsible for my keys and that losing my Private Key means losing my account.
+                    </label>
+                </div>
+
+                <div class="auth-actions">
+                    <button class="btn btn-primary" id="continueToProfileBtn" onclick="showAuthStep('profile')" disabled>
+                        Continue to Profile
+                        <span class="material-symbols-rounded">arrow_forward</span>
+                    </button>
+                </div>
+            </div>
             <div class="auth-panel" id="auth-profile">
-                <h3>Optional profile setup</h3>
-                <p>Add a display name, bio, and NIP-05. You can edit this later.</p>
-                <div class="form-group">
-                    <label for="authDisplayNameInput">Display name</label>
-                    <input type="text" id="authDisplayNameInput" placeholder="Satoshi">
+                <div class="auth-step-header">
+                    <h3>Customize your profile</h3>
+                    <p>Personalize your experience with a name and avatar. You can always change this later.</p>
                 </div>
-                <div class="form-group">
-                    <label for="authNameInput">Username</label>
-                    <input type="text" id="authNameInput" placeholder="satoshi">
+
+                <div class="auth-section">
+                    <div class="auth-avatar-setup">
+                        <div class="auth-avatar-preview" id="authAvatarPreview">
+                            <span class="material-symbols-rounded">person</span>
+                        </div>
+                        <div class="form-group" style="flex: 1;">
+                            <label for="authPictureInput">Profile Picture URL</label>
+                            <input type="text" id="authPictureInput" placeholder="https://..." oninput="updateAuthAvatarPreview(this.value)">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="authDisplayNameInput">Display Name</label>
+                        <input type="text" id="authDisplayNameInput" placeholder="Satoshi">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="authNameInput">Username (@handle)</label>
+                        <input type="text" id="authNameInput" placeholder="satoshi">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="authAboutInput">About Me</label>
+                        <textarea id="authAboutInput" placeholder="Tell people about yourself" rows="3"></textarea>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label for="authAboutInput">About</label>
-                    <textarea id="authAboutInput" placeholder="Tell people about yourself"></textarea>
-                </div>
-                <div class="form-group">
-                    <label for="authPictureInput">Profile image URL</label>
-                    <input type="text" id="authPictureInput" placeholder="https://...">
-                </div>
-                <div class="form-group">
-                    <label for="authBannerInput">Banner URL</label>
-                    <input type="text" id="authBannerInput" placeholder="https://...">
-                </div>
-                <div class="form-group">
-                    <label for="authWebsiteInput">Website</label>
-                    <input type="text" id="authWebsiteInput" placeholder="https://...">
-                </div>
-                <div class="form-group">
-                    <label for="authNip05Input">NIP-05 identifier</label>
-                    <input type="text" id="authNip05Input" placeholder="name@domain.tld">
-                    <div class="nip05-status" id="authNip05Status">Not verified</div>
-                </div>
-                <div class="form-group">
-                    <label for="authLud16Input">Lightning address (lud16)</label>
-                    <input type="text" id="authLud16Input" placeholder="name@domain.tld">
-                </div>
+
                 <div class="auth-actions">
                     <button class="btn btn-secondary" onclick="skipProfileSetup()">Skip for now</button>
                     <button class="btn btn-primary" onclick="saveProfileAndContinue('auth')">
                         <span class="material-symbols-rounded">check</span>
-                        Save & Continue
+                        Finish Setup
                     </button>
                 </div>
             </div>
@@ -181,9 +255,9 @@
                     <div class="chat-area">
                         <div class="chat-placeholder" id="chatPlaceholder">
                             <div class="placeholder-content">
-                                <span class="material-symbols-rounded">chat_bubble</span>
+                                <img src="assets/icon.svg" class="placeholder-logo" alt="emessage logo">
                                 <h3>emessage</h3>
-                                <p>Start a new conversation to begin messaging</p>
+                                <p>Encrypted, decentralized, Nostr-based messaging. Start a new conversation to begin.</p>
                                 <button class="btn btn-primary" onclick="showNewChatModal()">
                                     <span class="material-symbols-rounded">add</span>
                                     New Conversation
@@ -506,6 +580,16 @@
                                         </div>
                                     </div>
 
+                                    <!-- Automatic Progressive Sync handles this in the background -->
+                                    <div class="section-card" style="display: none;">
+                                        <h3>Troubleshooting</h3>
+                                        <p>If you are missing messages or conversations, perform a deep sync to re-fetch up to 1 year of history from all relays.</p>
+                                        <button class="btn btn-secondary" onclick="triggerDeepSync()">
+                                            <span class="material-symbols-rounded">sync</span>
+                                            Deep Sync History
+                                        </button>
+                                    </div>
+
                                     <div class="info-box">
                                         <span class="material-symbols-rounded">info</span>
                                         <div>
@@ -694,11 +778,12 @@
     <script src="js/storage.js"></script>
     <script src="js/keys.js"></script>
     <script src="js/profile.js"></script>
+    <script src="js/relay.js"></script>
     <script src="js/auth.js"></script>
     <script src="js/crypto.js"></script>
     <script src="js/ui.js"></script>
-    <script src="js/relay.js"></script>
     <script src="js/incognito.js"></script>
+
     <script src="js/chat.js"></script>
     <script src="js/gestures.js"></script>
     <script src="js/context-menu.js"></script>

@@ -668,21 +668,21 @@ function decodeAvatarFromImage(imageElement, size = 100) {
 
 // Test function to verify encoding/decoding round-trip
 function testEncodingDecodingRoundTrip(testString) {
-    console.log("Testing round-trip:", testString);
+    Logger.debug("Testing round-trip:", testString);
     
     // Encode
     const encodedSVG = encodeStringToAvatar(testString);
-    console.log("Encoded SVG length:", encodedSVG.length);
+    Logger.debug("Encoded SVG length:", encodedSVG.length);
     
     // Create a temporary image element for decoding
     const img = new Image();
     img.onload = function() {
         try {
             const decodedString = decodeAvatarFromImage(img);
-            console.log("Decoded:", decodedString);
-            console.log("Match:", testString === decodedString);
+            Logger.debug("Decoded:", decodedString);
+            Logger.debug("Match:", testString === decodedString);
         } catch (error) {
-            console.error("Decoding error:", error);
+            Logger.error("Decoding error:", error);
         }
     };
     
@@ -822,7 +822,7 @@ function generateSpiralPositions(size = 100) {
         currentRadius += radiusStep / (2 * Math.PI); // Gradually increase radius
     }
     
-    console.log(`Generated ${positions.length} spiral positions`);
+    Logger.debug(`Generated ${positions.length} spiral positions`);
     return positions;
 }
 
@@ -842,9 +842,9 @@ function encodeStringToAvatarSpiral(inputString, size = 100) {
     const dataPositionsNeeded = binaryData.length;
     const totalPositionsNeeded = dataPositionsNeeded + 3; // +3 for orientation markers
     
-    console.log(`String length: ${inputString.length}, Binary length: ${binaryData.length}`);
-    console.log(`Spiral positions: ${spiralPositions.length}, Needed: ${totalPositionsNeeded}`);
-    console.log(`Max capacity: ${Math.floor(spiralPositions.length - 3)} characters`);
+    Logger.debug(`String length: ${inputString.length}, Binary length: ${binaryData.length}`);
+    Logger.debug(`Spiral positions: ${spiralPositions.length}, Needed: ${totalPositionsNeeded}`);
+    Logger.debug(`Max capacity: ${Math.floor(spiralPositions.length - 3)} characters`);
     
     if (totalPositionsNeeded > spiralPositions.length) {
         throw new Error(`String too long. Max capacity: ${Math.floor(spiralPositions.length - 3)} characters`);
@@ -907,7 +907,7 @@ function decodeAvatarFromSpiralImage(img, size = 100) {
 
 // Decode spiral pattern (EXACT reverse of generateSpiralAvatarPattern)
 function decodeSpiralAvatarPattern(imageData, size = 100) {
-    console.log('=== DECODING START ===');
+    Logger.debug('=== DECODING START ===');
     
     // First, normalize the image to black dots on white background
     const normalizedImageData = normalizeDotCodeImage(imageData, size);
@@ -918,11 +918,11 @@ function decodeSpiralAvatarPattern(imageData, size = 100) {
     const gridSize = 32;
     const gridSpacing = radius / (gridSize * 0.45);
     
-    console.log('Size:', size, 'Center:', center, 'Radius:', radius, 'DotSize:', dotSize, 'GridSpacing:', gridSpacing);
+    Logger.debug('Size:', size, 'Center:', center, 'Radius:', radius, 'DotSize:', dotSize, 'GridSpacing:', gridSpacing);
     
     // Get spiral positions (EXACT same as encoding)
     const spiralPositions = generateSpiralOrderedGridPositions(size);
-    console.log('Got spiral positions:', spiralPositions.length);
+    Logger.debug('Got spiral positions:', spiralPositions.length);
     
     // Simple approach: just check if pixels are dark or light (now using normalized image)
     const detectedPattern = [];
@@ -946,7 +946,7 @@ function decodeSpiralAvatarPattern(imageData, size = 100) {
             detectedPattern.push(hasDot ? '1' : '0');
             
             if (i < 20) {
-                console.log(`Position ${i}: (${imageX}, ${imageY}) - RGB(${r},${g},${b}) - Brightness: ${brightness.toFixed(1)} - Dot: ${hasDot}`);
+                Logger.debug(`Position ${i}: (${imageX}, ${imageY}) - RGB(${r},${g},${b}) - Brightness: ${brightness.toFixed(1)} - Dot: ${hasDot}`);
             }
         } else {
             detectedPattern.push('0');
@@ -955,13 +955,13 @@ function decodeSpiralAvatarPattern(imageData, size = 100) {
     
     // Convert binary pattern back to string
     const binaryString = detectedPattern.join('');
-    console.log('Binary pattern length:', binaryString.length);
-    console.log('First 100 bits:', binaryString.substring(0, 100));
+    Logger.debug('Binary pattern length:', binaryString.length);
+    Logger.debug('First 100 bits:', binaryString.substring(0, 100));
     
     const result = binaryToString(binaryString);
-    console.log('Decoded result:', result);
-    console.log('Result length:', result.length);
-    console.log('=== DECODING END ===');
+    Logger.debug('Decoded result:', result);
+    Logger.debug('Result length:', result.length);
+    Logger.debug('=== DECODING END ===');
     
     return result;
 } 
@@ -1038,7 +1038,7 @@ function generateSpiralAvatarPattern(npub, center, radius, dotColor, size) {
     if (totalPositionsNeeded > spiralPositions.length) {
         const maxChars = Math.floor((spiralPositions.length - 3) / 8);
         const truncatedNpub = npub.substring(0, maxChars);
-        console.log(`Npub too long, truncated to ${maxChars} characters`);
+        Logger.debug(`Npub too long, truncated to ${maxChars} characters`);
         return generateSpiralAvatarPattern(truncatedNpub, center, radius, dotColor, size);
     }
     
@@ -1082,7 +1082,7 @@ function decodeSpiralAvatarFromImage(img, size = 100) {
 
 // Pre-process image to normalize to black dots on white background
 function normalizeDotCodeImage(imageData, size) {
-    console.log('=== NORMALIZING IMAGE ===');
+    Logger.debug('=== NORMALIZING IMAGE ===');
     
     // Create new imageData for normalized image
     const normalizedData = new ImageData(size, size);
@@ -1108,8 +1108,8 @@ function normalizeDotCodeImage(imageData, size) {
     const backgroundB = totalB / cornerSamples.length;
     const backgroundBrightness = (backgroundR + backgroundG + backgroundB) / 3;
     
-    console.log('Background color:', `RGB(${backgroundR.toFixed(0)}, ${backgroundG.toFixed(0)}, ${backgroundB.toFixed(0)})`);
-    console.log('Background brightness:', backgroundBrightness.toFixed(1));
+    Logger.debug('Background color:', `RGB(${backgroundR.toFixed(0)}, ${backgroundG.toFixed(0)}, ${backgroundB.toFixed(0)})`);
+    Logger.debug('Background brightness:', backgroundBrightness.toFixed(1));
     
     // Sample some dot areas to determine if dots are lighter or darker than background
     const samplePositions = [
@@ -1140,8 +1140,8 @@ function normalizeDotCodeImage(imageData, size) {
     const averageDotBrightness = dotSamples > 0 ? dotBrightnessSum / dotSamples : backgroundBrightness;
     const dotsAreLighter = averageDotBrightness > backgroundBrightness;
     
-    console.log('Average dot brightness:', averageDotBrightness.toFixed(1));
-    console.log('Dots are lighter than background:', dotsAreLighter);
+    Logger.debug('Average dot brightness:', averageDotBrightness.toFixed(1));
+    Logger.debug('Dots are lighter than background:', dotsAreLighter);
     
     // Process each pixel
     for (let i = 0; i < imageData.data.length; i += 4) {
@@ -1178,6 +1178,6 @@ function normalizeDotCodeImage(imageData, size) {
         normalizedData.data[i + 3] = 255; // Alpha = 255 (opaque)
     }
     
-    console.log('=== NORMALIZATION COMPLETE ===');
+    Logger.debug('=== NORMALIZATION COMPLETE ===');
     return normalizedData;
 } 
